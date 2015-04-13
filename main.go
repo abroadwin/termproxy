@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/pkg/term"
+	"github.com/erikh/termproxy/framing"
 	"github.com/erikh/termproxy/tperror"
 	"github.com/kr/pty"
 	"github.com/ogier/pflag"
@@ -159,18 +160,7 @@ func listen(l net.Listener, pty *os.File, input *bytes.Buffer) {
 		connections = append(connections, c)
 		connMutex.Unlock()
 
-		buf := make([]byte, 4)
-		if n, err := c.Read(buf); n != 4 || err != nil {
-			diag(err)
-			continue
-		}
-
-		ws := term.Winsize{}
-		ws.Height = (uint16(buf[1]) << 8) + uint16(buf[0])
-		ws.Width = (uint16(buf[3]) << 8) + uint16(buf[2])
-		term.SetWinsize(pty.Fd(), &ws)
-
-		go readRemoteInput(c, input)
+		go runStreamLoop(c, pty, input)
 	}
 }
 
@@ -259,10 +249,14 @@ func serve() {
 
 			connMutex.Lock()
 			for i, c := range connections {
-				if _, err := c.Write(output.Bytes()); err != nil {
+				data := &framing.Data{}
+				data.WriteType(c)
+				data.Data = output.Bytes()
+				if err := data.WriteTo(c); err != nil {
 					if len(connections)+1 > len(connections) {
 						connections = connections[:i]
 					} else {
+						c.Close()
 						connections = append(connections[:i], connections[i+1:]...)
 					}
 				}
@@ -282,4 +276,33 @@ func serve() {
 
 	term.RestoreTerminal(0, windowState)
 	fmt.Println("Shell exited!")
+}
+
+func runStreamLoop(c net.Conn, pty *os.File, input io.Writer) {
+	s := &framing.StreamParser{
+		Reader: c,
+		DataHandler: func(r io.Reader) error {
+			data := &framing.Data{}
+			data.ReadFrom(r)
+			_, err := io.Copy(input, bytes.NewBuffer(data.Data))
+			return err
+		},
+		WinchHandler: func(r io.Reader) error {
+			winch := &framing.Winch{}
+			if err := winch.ReadFrom(r); err != nil {
+				return err
+			}
+
+			if err := term.SetWinsize(pty.Fd(), &term.Winsize{Height: winch.Height, Width: winch.Width}); err != nil {
+				return err
+			}
+
+			return nil
+		},
+		ErrorHandler: func(err error) {
+			errorOut(&tperror.TPError{err.Error(), tperror.ErrCommand})
+		},
+	}
+
+	s.Loop()
 }

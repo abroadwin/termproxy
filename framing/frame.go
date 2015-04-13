@@ -21,12 +21,12 @@ type Message interface {
 }
 
 type Winch struct {
-	Width  int16
-	Height int16
+	Width  uint16
+	Height uint16
 }
 
 type Data struct {
-	data   []byte
+	Data   []byte
 	length int32
 }
 
@@ -72,9 +72,9 @@ func (w *Winch) ReadFrom(r io.Reader) (err error) {
 }
 
 func (msg *Data) WriteTo(w io.Writer) error {
-	msg.length = int32(len(msg.data))
+	msg.length = int32(len(msg.Data))
 	binary.Write(w, binary.LittleEndian, msg.length)
-	_, err := w.Write(msg.data)
+	_, err := w.Write(msg.Data)
 	return err
 }
 
@@ -88,10 +88,10 @@ func (msg *Data) ReadFrom(r io.Reader) (err error) {
 		return
 	}
 
-	if msg.data == nil || msg.length > int32(len(msg.data)) {
+	if msg.Data == nil || msg.length > int32(len(msg.Data)) {
 		b = make([]byte, msg.length)
 	} else {
-		b = msg.data
+		b = msg.Data
 	}
 
 	n, err = r.Read(b)
@@ -101,15 +101,15 @@ func (msg *Data) ReadFrom(r io.Reader) (err error) {
 	if msg.length > int32(n) {
 		return fmt.Errorf("expected %d bytes, read only %d", msg.length, n)
 	}
-	msg.data = b
+	msg.Data = b
 	return
 }
 
 func (msg *Data) Bytes() []byte {
-	if len(msg.data) > int(msg.length) {
-		return msg.data[:msg.length]
+	if len(msg.Data) > int(msg.length) {
+		return msg.Data[:msg.length]
 	}
-	return msg.data
+	return msg.Data
 }
 
 type StreamParser struct {
@@ -128,7 +128,7 @@ func (s *StreamParser) Loop() {
 
 	for err == nil {
 		err = binary.Read(s.Reader, binary.LittleEndian, &msgType)
-		if err != nil {
+		if err != nil && s.ErrorHandler != nil {
 			s.ErrorHandler(err)
 			return
 		}
@@ -145,7 +145,7 @@ func (s *StreamParser) Loop() {
 		}
 	}
 
-	if err != io.EOF {
+	if err != io.EOF && s.ErrorHandler != nil {
 		s.ErrorHandler(err)
 	}
 }
