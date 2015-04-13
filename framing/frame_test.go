@@ -18,7 +18,7 @@ func TestWinchExchangeErrors(t *testing.T) {
 func TestDataExchangeErrors(t *testing.T) {
 	buf := new(bytes.Buffer)
 
-	data := &Data{data: []byte("hello"), length: 30}
+	data := &Data{Data: []byte("hello"), length: 30}
 	if err := data.WriteTo(buf); err != nil {
 		// this call should not error. see below for the error condition.
 		t.Fatal(err)
@@ -39,7 +39,7 @@ func TestDataExchangeErrors(t *testing.T) {
 
 func TestDataExchange(t *testing.T) {
 	buf := new(bytes.Buffer)
-	data := &Data{data: []byte("hello")}
+	data := &Data{Data: []byte("hello")}
 
 	if err := data.WriteTo(buf); err != nil {
 		t.Fatal(err)
@@ -130,7 +130,7 @@ func TestStreamParser(t *testing.T) {
 		t.Fatalf("Window change protocol failed to read winch properly: %v", winch)
 	}
 
-	newData := &Data{data: []byte("hello")}
+	newData := &Data{Data: []byte("hello")}
 	if err := newData.WriteType(w); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestStreamParser(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if string(data.data) != "hello" {
-		t.Fatalf("Data protocol failed to read properly: %v, %s", data.data, string(data.data))
+	if string(data.Data) != "hello" {
+		t.Fatalf("Data protocol failed to read properly: %v, %s", data.Data, string(data.Data))
 	}
 }

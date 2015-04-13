@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/docker/docker/pkg/term"
+	"github.com/erikh/termproxy/framing"
 	"github.com/erikh/termproxy/tperror"
 	"github.com/ogier/pflag"
 	"golang.org/x/sys/unix"
@@ -96,32 +97,35 @@ func writeTermSize(c net.Conn) *tperror.TPError {
 		return tperr
 	}
 
-	if _, err := c.Write([]byte{
-		byte(ws.Height & 0xFF),
-		byte((ws.Height & 0xFF00) >> 8),
-		byte(ws.Width & 0xFF),
-		byte((ws.Width & 0xFF00) >> 8),
-	}); err != nil {
+	winch := &framing.Winch{Height: ws.Height, Width: ws.Width}
+
+	winch.WriteType(c)
+	if err := winch.WriteTo(c); err != nil {
 		return &tperror.TPError{fmt.Sprintf("Error writing terminal size to server: %v", err), tperror.ErrNetwork | tperror.ErrTerminal}
 	}
 
 	return nil
 }
 
-func copyToStdout(c net.Conn) {
-	if _, err := io.Copy(os.Stdout, c); err != nil && err != io.EOF {
-		errorOut(&tperror.TPError{fmt.Sprintf("Error reading from server: %v", err), tperror.ErrNetwork})
-	}
-}
-
 func copyStdin(c net.Conn) {
-	if _, err := io.Copy(c, os.Stdin); err != nil && err != io.EOF {
-		if neterr, ok := err.(*net.OpError); ok && neterr.Err == unix.EPIPE {
-			term.RestoreTerminal(0, windowState)
-			fmt.Println("\n\nConnection terminated!")
-			os.Exit(0)
-		} else {
-			errorOut(&tperror.TPError{fmt.Sprintf("Error writing to server: %v", err), tperror.ErrNetwork})
+	for {
+		data := &framing.Data{}
+		buf := make([]byte, 256)
+		n, err := os.Stdin.Read(buf)
+		if err != nil {
+			errorOut(&tperror.TPError{"Error reading from Stdin", tperror.ErrTerminal})
+		}
+
+		data.Data = buf[:n]
+		data.WriteType(c)
+		if err := data.WriteTo(c); err != nil && err != io.EOF {
+			if neterr, ok := err.(*net.OpError); ok && neterr.Err == unix.EPIPE {
+				term.RestoreTerminal(0, windowState)
+				fmt.Println("\n\nConnection terminated!")
+				os.Exit(0)
+			} else {
+				errorOut(&tperror.TPError{fmt.Sprintf("Error writing to server: %v", err), tperror.ErrNetwork})
+			}
 		}
 	}
 }
@@ -138,8 +142,26 @@ func main() {
 	c := connect()
 	writeTermSize(c)
 
-	go copyToStdout(c)
 	go copyStdin(c)
 
-	select {}
+	s := framing.StreamParser{
+		Reader: c,
+		ErrorHandler: func(err error) {
+			errorOut(&tperror.TPError{err.Error(), tperror.ErrCommand})
+		},
+		DataHandler: func(r io.Reader) error {
+			data := &framing.Data{}
+			if err := data.ReadFrom(r); err != nil {
+				return err
+			}
+
+			if _, err := os.Stdout.Write(data.Data); err != nil {
+				return err
+			}
+
+			return nil
+		},
+	}
+
+	s.Loop()
 }
