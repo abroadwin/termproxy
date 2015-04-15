@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -108,6 +109,9 @@ func writeTermSize(c net.Conn) *tperror.TPError {
 }
 
 func copyStdin(c net.Conn) {
+	var breakpressed bool
+	var pPressed bool
+
 	for {
 		data := &framing.Data{}
 		buf := make([]byte, 256)
@@ -116,7 +120,30 @@ func copyStdin(c net.Conn) {
 			errorOut(&tperror.TPError{"Error reading from Stdin", tperror.ErrTerminal})
 		}
 
-		data.Data = buf[:n]
+		buf = buf[:n]
+
+		if bytes.Contains(buf, []byte{16, 17}) {
+			buf = bytes.Replace(buf, []byte{16, 17}, []byte{}, -1)
+			breakpressed = true
+		}
+
+		if bytes.HasPrefix(buf, []byte{17}) && pPressed {
+			buf = bytes.Replace(buf, []byte{17}, []byte{}, 1)
+			breakpressed = true
+		}
+
+		if bytes.HasSuffix(buf, []byte{16}) {
+			buf = bytes.TrimRight(buf, string([]byte{16}))
+			pPressed = true
+		}
+
+		if breakpressed {
+			term.RestoreTerminal(0, windowState)
+			fmt.Println("\n\nConnection terminated!")
+			os.Exit(0)
+		}
+
+		data.Data = buf
 		data.WriteType(c)
 		if err := data.WriteTo(c); err != nil && err != io.EOF {
 			if neterr, ok := err.(*net.OpError); ok && neterr.Err == unix.EPIPE {
