@@ -9,6 +9,8 @@ import (
 	"io/ioutil"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/docker/docker/pkg/term"
 	"github.com/erikh/termproxy/framing"
@@ -157,6 +159,25 @@ func copyStdin(c net.Conn) {
 	}
 }
 
+func sigwinchHandler(sigchan chan os.Signal, c net.Conn) {
+	for {
+		<-sigchan
+		ws, err := term.GetWinsize(0)
+		if err != nil {
+			errorOut(&tperror.TPError{fmt.Sprintf("Error getting terminal size, aborting: %v", err), tperror.ErrTerminal})
+		}
+
+		winch := &framing.Winch{Height: ws.Height, Width: ws.Width}
+		if err := winch.WriteType(c); err != nil {
+			errorOut(&tperror.TPError{fmt.Sprintf("Error writing winch to server: %v", err), tperror.ErrNetwork})
+		}
+
+		if err := winch.WriteTo(c); err != nil {
+			errorOut(&tperror.TPError{fmt.Sprintf("Error writing winch to server: %v", err), tperror.ErrNetwork})
+		}
+	}
+}
+
 func main() {
 	pflag.Parse()
 
@@ -169,6 +190,11 @@ func main() {
 	c := connect()
 	writeTermSize(c)
 
+	sigchan := make(chan os.Signal)
+
+	signal.Notify(sigchan, syscall.SIGWINCH)
+
+	go sigwinchHandler(sigchan, c)
 	go copyStdin(c)
 
 	s := framing.StreamParser{
@@ -183,6 +209,18 @@ func main() {
 			}
 
 			if _, err := os.Stdout.Write(data.Data); err != nil {
+				return err
+			}
+
+			return nil
+		},
+		WinchHandler: func(r io.Reader) error {
+			winch := &framing.Winch{}
+			if err := winch.ReadFrom(r); err != nil {
+				return err
+			}
+
+			if err := term.SetWinsize(0, &term.Winsize{Height: winch.Height, Width: winch.Width}); err != nil {
 				return err
 			}
 
