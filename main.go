@@ -299,9 +299,6 @@ func runStreamLoop(c net.Conn, pty *os.File, input io.Writer) {
 
 			return nil
 		},
-		ErrorHandler: func(err error) {
-			errorOut(&tperror.TPError{err.Error(), tperror.ErrCommand})
-		},
 	}
 
 	s.Loop()
