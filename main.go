@@ -10,8 +10,10 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/docker/docker/pkg/term"
@@ -27,6 +29,7 @@ var (
 	mutex       = new(sync.Mutex)
 	connMutex   = new(sync.Mutex)
 	connections = []net.Conn{}
+	windowSize  *term.Winsize
 	windowState *term.State
 )
 
@@ -64,6 +67,43 @@ func main() {
 	}
 
 	serve()
+}
+
+func compareAndSetWinsize(ws *term.Winsize, pty *os.File) {
+	if ws.Height <= windowSize.Height || ws.Width <= windowSize.Width {
+		windowSize = ws
+		term.SetWinsize(pty.Fd(), ws)
+		connMutex.Lock()
+		for i, c := range connections {
+			var prune bool
+
+			winch := &framing.Winch{Height: ws.Height, Width: ws.Width}
+
+			if err := winch.WriteType(c); err != nil {
+				prune = true
+			}
+			if err := winch.WriteTo(c); err != nil {
+				prune = true
+			}
+
+			if prune {
+				pruneConnection(i, c)
+			}
+		}
+		connMutex.Unlock()
+	}
+}
+
+func handleWinch(sigchan chan os.Signal, pty *os.File) {
+	for {
+		<-sigchan
+		ws, err := term.GetWinsize(0)
+		if err != nil {
+			errorOut(&tperror.TPError{fmt.Sprintf("Could not retrieve the terminal size: %v", err), tperror.ErrTerminal})
+		}
+
+		compareAndSetWinsize(ws, pty)
+	}
 }
 
 func setTerminal() error {
@@ -109,6 +149,8 @@ func setPTYTerminal(pty *os.File) *tperror.TPError {
 	if err != nil {
 		return &tperror.TPError{fmt.Sprintf("Could not retrieve the terminal dimensions: %v", err), tperror.ErrTerminal}
 	}
+
+	windowSize = ws
 
 	if err := term.SetWinsize(pty.Fd(), ws); err != nil {
 		return &tperror.TPError{fmt.Sprintf("Could not set the terminal size of the PTY: %v", err), tperror.ErrTerminal}
@@ -192,6 +234,17 @@ func copyPTY(pty *os.File, output io.Writer) {
 	}
 }
 
+// presumes the lock has already been acquired
+func pruneConnection(i int, c net.Conn) {
+	c.Close()
+
+	if len(connections)+1 > len(connections) {
+		connections = connections[:i]
+	} else {
+		connections = append(connections[:i], connections[i+1:]...)
+	}
+}
+
 func serve() {
 	if err := setTerminal(); err != nil {
 		errorOut(&tperror.TPError{fmt.Sprintf("Could not create a raw terminal: %v", err), tperror.ErrTerminal})
@@ -228,6 +281,10 @@ func serve() {
 	input := new(bytes.Buffer)
 	output := new(bytes.Buffer)
 
+	sigchan := make(chan os.Signal)
+	go handleWinch(sigchan, pty)
+	signal.Notify(sigchan, syscall.SIGWINCH)
+
 	go listen(l, pty, input)
 	go copyStdin(input)
 	go copyPTY(pty, output)
@@ -253,12 +310,7 @@ func serve() {
 				data.WriteType(c)
 				data.Data = output.Bytes()
 				if err := data.WriteTo(c); err != nil {
-					if len(connections)+1 > len(connections) {
-						connections = connections[:i]
-					} else {
-						c.Close()
-						connections = append(connections[:i], connections[i+1:]...)
-					}
+					pruneConnection(i, c)
 				}
 			}
 			connMutex.Unlock()
@@ -293,10 +345,7 @@ func runStreamLoop(c net.Conn, pty *os.File, input io.Writer) {
 				return err
 			}
 
-			if err := term.SetWinsize(pty.Fd(), &term.Winsize{Height: winch.Height, Width: winch.Width}); err != nil {
-				return err
-			}
-
+			compareAndSetWinsize(&term.Winsize{Height: winch.Height, Width: winch.Width}, pty)
 			return nil
 		},
 	}
