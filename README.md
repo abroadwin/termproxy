@@ -6,10 +6,14 @@ termproxy is a shared program tool. It allows you to start the program of your
 choice (a shell, vim/emacs, etc) and allows others to connect and interact with
 it. The intended use case is pairing.
 
-## SSL Notice
+## Notice
 
-This program makes heavy use of SSL and certificates. Follow the instructions
-below to generate a CA, server and client certificate for use.
+This program makes heavy use of TLS authentication. It will not run unless
+the below instructions are followed or unless you have generated your own CA
+infrastructure with another tool such as `openssl`.
+
+Follow the instructions below to generate a CA, server and client certificate
+for use.
 
 ```bash
 $ host=$(cat /etc/hostname)
@@ -43,6 +47,12 @@ $ go get github.com/erikh/termproxy
 # for the client
 $ go get github.com/erikh/termproxy/termproxy-client
 ```
+
+## Usage
+
+You can pass `-help` to both programs to learn their arguments.
+
+You can press `^P^Q` to detach your client.
 
 ## Author
 
