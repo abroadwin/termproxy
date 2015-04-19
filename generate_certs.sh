@@ -12,4 +12,6 @@ generate_cert --ca ca.crt --ca-key ca.key \
   --cert client.crt --key client.key \
   --overwrite
 
-cp -v *.crt client.key termproxy-client
+cp -v ca.* server.* tp
+cp -v *.crt client.key tpc
+rm -v *.crt *.key
