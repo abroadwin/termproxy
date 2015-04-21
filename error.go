@@ -17,14 +17,15 @@ var ErrorOut func(string, error, int) = errorout
 
 func errorout(msg string, err error, exitcode int) {
 	windowStateMutex.Lock()
+
+	if err != nil {
+		fmt.Println(fmt.Sprintf(msg+": %v", err))
+	}
+
 	if err := RestoreTerminal(0, windowState); err != nil {
 		Exit(fmt.Sprintf("Could not restore terminal during termination: %v", err), ErrTerminal)
 	}
 	windowStateMutex.Unlock()
-
-	if err != nil {
-		msg = fmt.Sprintf(msg+": %v", err)
-	}
 
 	Exit(msg, exitcode)
 }

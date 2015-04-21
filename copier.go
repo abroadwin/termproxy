@@ -21,8 +21,14 @@ type Copier struct {
 	ioLock *sync.Mutex
 }
 
-func NewCopier() *Copier {
-	return &Copier{ioLock: new(sync.Mutex)}
+func NewCopier(m *MultiCopier) *Copier {
+	copier := &Copier{ioLock: new(sync.Mutex)}
+
+	if m != nil {
+		copier.ioLock = m.ioLock
+	}
+
+	return copier
 }
 
 func (c *Copier) Copy(w io.Writer, r io.Reader) error {
