@@ -223,7 +223,7 @@ func serve(listenSpec, cmd string) {
 	go handleWinch(sigchan, pty)
 	signal.Notify(sigchan, syscall.SIGWINCH)
 
-	copier := termproxy.NewCopier()
+	copier := termproxy.NewCopier(nil)
 
 	go listen(l, pty, input)
 	go copier.Copy(input, os.Stdin)

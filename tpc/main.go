@@ -74,7 +74,7 @@ func copyStdin(c net.Conn) {
 	var breakpressed bool
 	var pPressed bool
 
-	copier := termproxy.NewCopier()
+	copier := termproxy.NewCopier(nil)
 
 	copier.Handler = func(buf []byte, w io.Writer, r io.Reader) error {
 		if bytes.Contains(buf, []byte{16, 17}) {
