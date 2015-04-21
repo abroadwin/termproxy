@@ -41,7 +41,7 @@ func TestDataExchange(t *testing.T) {
 	buf := new(bytes.Buffer)
 	data := &Data{Data: []byte("hello")}
 
-	if err := data.WriteTo(buf); err != nil {
+	if err := data.WritePayload(buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,7 +64,7 @@ func TestWinchExchange(t *testing.T) {
 	buf := new(bytes.Buffer)
 	winch := &Winch{Height: 20, Width: 30}
 
-	if err := winch.WriteTo(buf); err != nil {
+	if err := winch.WritePayload(buf); err != nil {
 		t.Fatal(err)
 	}
 
@@ -96,18 +96,12 @@ func TestStreamParser(t *testing.T) {
 
 	s := &StreamParser{
 		Reader: r,
-		DataHandler: func(r io.Reader) error {
-			if err := data.ReadFrom(r); err != nil {
-				return err
-			}
-
+		DataHandler: func(newData *Data) error {
+			data = newData
 			return nil
 		},
-		WinchHandler: func(r io.Reader) error {
-			if err := winch.ReadFrom(r); err != nil {
-				return err
-			}
-
+		WinchHandler: func(newWinch *Winch) error {
+			winch = newWinch
 			return nil
 		},
 		ErrorHandler: func(err error) {
@@ -118,10 +112,6 @@ func TestStreamParser(t *testing.T) {
 	go s.Loop()
 
 	newWinch := &Winch{20, 30}
-	if err := newWinch.WriteType(w); err != nil {
-		t.Fatal(err)
-	}
-
 	if err := newWinch.WriteTo(w); err != nil {
 		t.Fatal(err)
 	}
@@ -131,10 +121,6 @@ func TestStreamParser(t *testing.T) {
 	}
 
 	newData := &Data{Data: []byte("hello")}
-	if err := newData.WriteType(w); err != nil {
-		t.Fatal(err)
-	}
-
 	if err := newData.WriteTo(w); err != nil {
 		t.Fatal(err)
 	}

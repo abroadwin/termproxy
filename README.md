@@ -42,10 +42,10 @@ development of termproxy.
 ## Installation
 
 ```bash
-# for the server
-$ go get github.com/erikh/termproxy
-# for the client
-$ go get github.com/erikh/termproxy/termproxy-client
+# for the server `tp`
+$ go get github.com/erikh/termproxy/tp
+# for the client `tpc`
+$ go get github.com/erikh/termproxy/tpc
 ```
 
 ## Usage
