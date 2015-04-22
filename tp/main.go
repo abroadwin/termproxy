@@ -134,7 +134,7 @@ func waitForClose(cmd *exec.Cmd, pty *os.File) {
 }
 
 func startCommand(command string) (*os.File, *exec.Cmd, error) {
-	cmd := exec.Command(command)
+	cmd := exec.Command("/bin/sh", "-c", command)
 	pty, err := pty.Start(cmd)
 	if err != nil {
 		return nil, nil, err
@@ -196,7 +196,7 @@ func pruneConnection(writers []net.Conn, i int, err error) ([]net.Conn, error) {
 	return connections, nil
 }
 
-func serve(listenSpec, cmd string) {
+func serve(listenSpec string, cmd string) {
 	termproxy.MakeRaw(0)
 
 	pty, execCmd, err := startCommand(cmd)
