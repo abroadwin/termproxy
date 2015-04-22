@@ -17,7 +17,6 @@ import (
 
 	"github.com/erikh/termproxy"
 	"github.com/erikh/termproxy/framing"
-	"github.com/kr/pty"
 	"github.com/ogier/pflag"
 )
 
@@ -108,41 +107,13 @@ func compareAndSetWinsize(host string, ws *framing.Winch, pty *os.File, cmd *exe
 	winsizeMutex.Unlock()
 }
 
-func handleWinch(sigchan chan os.Signal, pty *os.File, cmd *exec.Cmd) {
-	for {
-		<-sigchan
-		ws, err := termproxy.GetWinsize(0)
-		if err != nil {
-			termproxy.ErrorOut("Could not retrieve the terminal size: %v", err, termproxy.ErrTerminal)
-		}
-
-		compareAndSetWinsize("localhost", ws, pty, cmd)
-	}
-}
-
-func waitForClose(cmd *exec.Cmd, pty *os.File) {
-	cmd.Wait()
-
-	// FIXME sloppy as heck but works for now.
-	for _, c := range connections {
-		c.Close()
-	}
-
-	pty.Close()
-
-	termproxy.ErrorOut("Shell Exited!", nil, 0)
-}
-
-func startCommand(command string) (*os.File, *exec.Cmd, error) {
-	cmd := exec.Command("/bin/sh", "-c", command)
-	pty, err := pty.Start(cmd)
+func handleWinch(pty *os.File, cmd *exec.Cmd) {
+	ws, err := termproxy.GetWinsize(0)
 	if err != nil {
-		return nil, nil, err
+		termproxy.ErrorOut("Could not retrieve the terminal size: %v", err, termproxy.ErrTerminal)
 	}
 
-	go waitForClose(cmd, pty)
-
-	return pty, cmd, nil
+	compareAndSetWinsize("localhost", ws, pty, cmd)
 }
 
 func setPTYTerminal(pty *os.File, cmd *exec.Cmd) {
@@ -199,12 +170,29 @@ func pruneConnection(writers []net.Conn, i int, err error) ([]net.Conn, error) {
 func serve(listenSpec string, cmd string) {
 	termproxy.MakeRaw(0)
 
-	pty, execCmd, err := startCommand(cmd)
-	if err != nil {
-		termproxy.ErrorOut(fmt.Sprintf("Could not start program %s", cmd), err, termproxy.ErrCommand)
+	command := termproxy.NewCommand(cmd)
+	command.CloseHandler = func(pty *os.File, cmd *exec.Cmd) {
+		connMutex.Lock()
+		// FIXME sloppy as heck but works for now.
+		for _, conn := range connections {
+			conn.Close()
+		}
+		connMutex.Unlock()
+
 	}
 
-	setPTYTerminal(pty, execCmd)
+	command.PTYSetupHandler = setPTYTerminal
+	command.WinchHandler = handleWinch
+
+	go func(command *termproxy.Command) {
+		if err := command.Run(); err != nil {
+			if err != nil {
+				termproxy.ErrorOut(fmt.Sprintf("Could not start program %s", cmd), err, termproxy.ErrCommand)
+			}
+		}
+
+		termproxy.ErrorOut("Shell Exited!", nil, 0)
+	}(command)
 
 	cert, pool := loadCerts()
 
@@ -224,14 +212,13 @@ func serve(listenSpec string, cmd string) {
 	output := new(bytes.Buffer)
 
 	sigchan := make(chan os.Signal)
-	go handleWinch(sigchan, pty, execCmd)
 	signal.Notify(sigchan, syscall.SIGWINCH)
 
 	copier := termproxy.NewCopier(nil)
 
-	go listen(l, pty, input, execCmd)
+	go listen(l, command.PTY(), input, command.Command())
 	go copier.Copy(input, os.Stdin)
-	go copier.Copy(output, pty)
+	go copier.Copy(output, command.PTY())
 
 	copier.Handler = func(buf []byte, w io.Writer, r io.Reader) ([]byte, error) {
 		input.Reset()
@@ -252,7 +239,7 @@ func serve(listenSpec string, cmd string) {
 	// there's gotta be a good way to do this in an evented/blocking manner.
 	for {
 		if input.Len() > 0 {
-			copier.Copy(pty, input)
+			copier.Copy(command.PTY(), input)
 		}
 
 		if output.Len() > 0 {
