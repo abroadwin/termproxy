@@ -57,3 +57,7 @@ You can press `^P^Q` to detach your client.
 ## Author
 
 Erik Hollensbe <erik@hollensbe.org>
+
+This code also uses a vendored copy of `docker/docker`'s `pkg/term` to provide
+the termios support. It is located in the `dockerterm` directory. This was done
+to ensure stability of the package.
