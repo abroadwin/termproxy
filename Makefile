@@ -1,13 +1,13 @@
 test:
 	go test -v ./...
 
+cert:
+	sh generate_cert.sh
+
 dist:
-	mkdir -p /tmp/termproxy-`cat ${PWD}/VERSION` && \
-	cd /tmp/termproxy-`cat ${PWD}/VERSION` && \
-	go build github.com/erikh/termproxy/tp && \
-	go build github.com/erikh/termproxy/tpc && \
-	cd .. && \
-	tar cvzf termproxy-`cat ${PWD}/VERSION`.tar.gz termproxy-`cat ${PWD}/VERSION` && \
-  cp termproxy-`cat ${PWD}/VERSION`.tar.gz ${PWD}	
+	sh dist.sh
+
+distclean:
+	rm termproxy-*.tar.gz
 
 all: test dist
