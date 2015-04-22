@@ -32,6 +32,7 @@ func errorout(msg string, err error, exitcode int) {
 }
 
 func Exit(message string, exitcode int) {
+	WriteClear(os.Stdout)
 	fmt.Println(message)
 	os.Exit(exitcode)
 }
