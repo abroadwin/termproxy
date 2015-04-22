@@ -5,7 +5,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/docker/docker/pkg/term"
+	term "github.com/erikh/termproxy/dockerterm"
 	"github.com/erikh/termproxy/framing"
 )
 
