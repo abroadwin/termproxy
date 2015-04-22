@@ -76,7 +76,7 @@ func copyStdin(c net.Conn) {
 
 	copier := termproxy.NewCopier(nil)
 
-	copier.Handler = func(buf []byte, w io.Writer, r io.Reader) error {
+	copier.Handler = func(buf []byte, w io.Writer, r io.Reader) ([]byte, error) {
 		if bytes.Contains(buf, []byte{16, 17}) {
 			buf = bytes.Replace(buf, []byte{16, 17}, []byte{}, -1)
 			breakpressed = true
@@ -96,7 +96,7 @@ func copyStdin(c net.Conn) {
 			termproxy.ErrorOut("Connection terminated!", nil, 0)
 		}
 
-		return nil
+		return buf, nil
 	}
 
 	if err := copier.CopyFrames(c, os.Stdin); err != nil {

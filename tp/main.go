@@ -233,20 +233,20 @@ func serve(listenSpec, cmd string) {
 	go copier.Copy(input, os.Stdin)
 	go copier.Copy(output, pty)
 
-	copier.Handler = func(buf []byte, w io.Writer, r io.Reader) error {
+	copier.Handler = func(buf []byte, w io.Writer, r io.Reader) ([]byte, error) {
 		input.Reset()
-		return nil
+		return buf, nil
 	}
 
 	multiCopier := termproxy.NewMultiCopier(copier)
 	multiCopier.ErrorHandler = pruneConnection
-	multiCopier.Handler = func(buf []byte, writers []net.Conn, reader io.Reader) error {
+	multiCopier.Handler = func(buf []byte, writers []net.Conn, reader io.Reader) ([]byte, error) {
 		if _, err := os.Stdout.Write(buf); err != nil {
-			return err
+			return buf, err
 		}
 
 		output.Reset()
-		return nil
+		return buf, nil
 	}
 
 	// there's gotta be a good way to do this in an evented/blocking manner.

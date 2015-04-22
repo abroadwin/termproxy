@@ -10,13 +10,13 @@ import (
 
 type MultiCopier struct {
 	ErrorHandler func(writers []net.Conn, index int, err error) ([]net.Conn, error)
-	Handler      func(buf []byte, writers []net.Conn, r io.Reader) error
+	Handler      func(buf []byte, writers []net.Conn, r io.Reader) ([]byte, error)
 
 	ioLock *sync.Mutex
 }
 
 type Copier struct {
-	Handler func(buf []byte, w io.Writer, r io.Reader) error
+	Handler func(buf []byte, w io.Writer, r io.Reader) ([]byte, error)
 
 	ioLock *sync.Mutex
 }
@@ -41,13 +41,16 @@ func (c *Copier) Copy(w io.Writer, r io.Reader) error {
 
 		c.ioLock.Lock()
 
+		buf = buf[:n]
+
 		if c.Handler != nil {
-			if err := c.Handler(buf[:n], w, r); err != nil {
+			var err error
+			if buf, err = c.Handler(buf, w, r); err != nil {
 				return err
 			}
 		}
 
-		w.Write(buf[:n])
+		w.Write(buf)
 
 		c.ioLock.Unlock()
 	}
@@ -64,14 +67,17 @@ func (c *Copier) CopyFrames(w io.Writer, r io.Reader) error {
 
 		c.ioLock.Lock()
 
+		buf = buf[:n]
+
 		if c.Handler != nil {
-			if err := c.Handler(buf[:n], w, r); err != nil {
+			var err error
+			if buf, err = c.Handler(buf, w, r); err != nil {
 				c.ioLock.Unlock()
 				return err
 			}
 		}
 
-		data := &framing.Data{Data: buf[:n]}
+		data := &framing.Data{Data: buf}
 		if err := data.WriteTo(w); err != nil {
 			c.ioLock.Unlock()
 			return err
@@ -103,15 +109,18 @@ func (m *MultiCopier) CopyFrame(writers []net.Conn, reader io.Reader, length int
 		return nil, err
 	}
 
+	buf = buf[:n]
+
 	if m.Handler != nil {
-		if err := m.Handler(buf[:n], writers, reader); err != nil {
+		var err error
+		if buf, err = m.Handler(buf, writers, reader); err != nil {
 			return nil, err
 		}
 	}
 
 	for i, w := range writers {
 		data := &framing.Data{}
-		data.Data = buf[:n]
+		data.Data = buf
 		if err := data.WriteTo(w); err != nil {
 			if m.ErrorHandler != nil {
 				newWriters, err = m.ErrorHandler(writers, i, err)
