@@ -1,11 +1,13 @@
 package main
 
 import (
+	"net"
 	"os"
 	"sync"
 
 	"github.com/erikh/termproxy"
 	"github.com/erikh/termproxy/framing"
+	"github.com/erikh/termproxy/server"
 )
 
 var (
@@ -13,7 +15,7 @@ var (
 	winsizeMutex         = new(sync.Mutex)
 )
 
-func compareAndSetWinsize(host string, ws *framing.Winch, command *termproxy.Command) {
+func compareAndSetWinsize(host string, ws *framing.Winch, command *termproxy.Command, t *server.TLSServer) {
 	winsizeMutex.Lock()
 	connectionWinsizeMap[host] = ws
 
@@ -46,23 +48,9 @@ func compareAndSetWinsize(host string, ws *framing.Winch, command *termproxy.Com
 
 		termproxy.SetWinsize(command.PTY().Fd(), winsize)
 
-		connMutex.Lock()
-		for i, c := range connections {
-			var prune bool
-
-			if err := winsize.WriteTo(c); err != nil {
-				prune = true
-			}
-
-			if prune {
-				var err error
-				connections, err = pruneConnection(connections, i, err)
-				if err != nil {
-					termproxy.ErrorOut("Error closing connection", err, termproxy.ErrNetwork)
-				}
-			}
-		}
-		connMutex.Unlock()
+		t.Iterate(func(t *server.TLSServer, conn net.Conn, index int) error {
+			return winsize.WriteTo(conn)
+		})
 	}
 
 	winsizeMutex.Unlock()

@@ -7,13 +7,13 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
+	"sync"
 	"time"
 
 	"github.com/erikh/termproxy"
 	"github.com/erikh/termproxy/framing"
+	"github.com/erikh/termproxy/server"
 	"github.com/ogier/pflag"
 )
 
@@ -54,71 +54,89 @@ func launch(command *termproxy.Command) {
 func serve(listenSpec string, cmd string) {
 	termproxy.MakeRaw(0)
 
-	command := termproxy.NewCommand(cmd)
-	command.CloseHandler = closeHandler
-	command.PTYSetupHandler = setPTYTerminal
-	command.WinchHandler = handleWinch
-
-	go launch(command)
-
-	cert, pool := loadCerts()
-	listener, err := setupListener(listenSpec, pool, cert)
+	ioLock := new(sync.Mutex)
+	t, err := server.NewTLSServer(listenSpec, *serverCertPath, *serverKeyPath, *caCertPath)
 
 	if err != nil {
 		termproxy.ErrorOut(fmt.Sprintf("Network Error trying to listen on %s", pflag.Arg(0)), err, termproxy.ErrNetwork)
 	}
 
+	command := termproxy.NewCommand(cmd)
+	command.CloseHandler = closeHandler(t)
+	command.PTYSetupHandler = setPTYTerminal(t)
+	command.WinchHandler = handleWinch(t)
+
+	go launch(command)
+
 	input := new(bytes.Buffer)
 	output := new(bytes.Buffer)
 
-	sigchan := make(chan os.Signal)
-	signal.Notify(sigchan, syscall.SIGWINCH)
+	t.AcceptHandler = func(c net.Conn) {
+		go runStreamLoop(c, input, command, t)
+	}
 
-	go listen(listener, input, command)
+	t.CloseHandler = func(conn net.Conn) {
+		winsizeMutex.Lock()
+		delete(connectionWinsizeMap, conn.(*tls.Conn).RemoteAddr().String())
+		winsizeMutex.Unlock()
+		conn.Close()
+	}
 
-	copier := termproxy.NewCopier(nil)
+	go t.Listen()
 
-	go copier.Copy(input, os.Stdin)
-	go copier.Copy(output, command.PTY())
-
-	copier.Handler = func(buf []byte, w io.Writer, r io.Reader) ([]byte, error) {
+	ptyCopier := termproxy.NewCopier(ioLock)
+	ptyCopier.Handler = func(buf []byte, w io.Writer, r io.Reader) ([]byte, error) {
 		input.Reset()
 		return buf, nil
 	}
 
-	multiCopier := termproxy.NewMultiCopier(copier)
-	multiCopier.ErrorHandler = pruneConnection
-	multiCopier.Handler = func(buf []byte, writers []net.Conn, reader io.Reader) ([]byte, error) {
-		if _, err := os.Stdout.Write(buf); err != nil {
-			return nil, err
-		}
+	outputCopier := termproxy.NewCopier(nil)
+	inputCopier := termproxy.NewCopier(nil)
 
-		output.Reset()
-		return buf, nil
-	}
+	go inputCopier.Copy(input, os.Stdin)
 
-	// there's gotta be a good way to do this in an evented/blocking manner.
-	for {
-		if input.Len() > 0 {
-			copier.Copy(command.PTY(), input)
-		}
-
-		if output.Len() > 0 {
-			connMutex.Lock()
-			connections, _ = multiCopier.CopyFrame(connections, output, output.Len())
-			if err != nil {
-				connMutex.Unlock()
+	go func() {
+		for {
+			if err := outputCopier.Copy(output, command.PTY()); err != nil {
+				fmt.Println(err)
 			}
-			connMutex.Unlock()
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+
+	go func() {
+		for {
+			if input.Len() == 0 {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+
+			ptyCopier.Copy(command.PTY(), input)
+		}
+	}()
+
+	for {
+		if output.Len() == 0 {
+			time.Sleep(10 * time.Millisecond)
+			continue
 		}
 
-		time.Sleep(20 * time.Millisecond)
+		//ioLock.Lock()
+		buf := output.Bytes()
+
+		if _, err := os.Stdout.Write(buf); err != nil {
+			break
+		}
+
+		t.MultiCopy(buf)
+		output.Reset()
+		//ioLock.Unlock()
 	}
 
 	termproxy.ErrorOut("Shell Exited!", nil, 0)
 }
 
-func runStreamLoop(c net.Conn, input io.Writer, command *termproxy.Command) {
+func runStreamLoop(c net.Conn, input io.Writer, command *termproxy.Command, t *server.TLSServer) {
 	s := &framing.StreamParser{
 		Reader: c,
 		DataHandler: func(data *framing.Data) error {
@@ -126,7 +144,7 @@ func runStreamLoop(c net.Conn, input io.Writer, command *termproxy.Command) {
 			return err
 		},
 		WinchHandler: func(winch *framing.Winch) error {
-			compareAndSetWinsize(c.(*tls.Conn).RemoteAddr().String(), winch, command)
+			compareAndSetWinsize(c.(*tls.Conn).RemoteAddr().String(), winch, command, t)
 			return nil
 		},
 	}
