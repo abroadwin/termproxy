@@ -8,7 +8,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"sync"
@@ -52,7 +51,7 @@ func main() {
 	serve(pflag.Arg(0), pflag.Arg(1))
 }
 
-func compareAndSetWinsize(host string, ws *framing.Winch, pty *os.File, cmd *exec.Cmd) {
+func compareAndSetWinsize(host string, ws *framing.Winch, command *termproxy.Command) {
 	winsizeMutex.Lock()
 	connectionWinsizeMap[host] = ws
 
@@ -74,7 +73,7 @@ func compareAndSetWinsize(host string, ws *framing.Winch, pty *os.File, cmd *exe
 
 	winsize := &framing.Winch{Height: height, Width: width}
 
-	myws, _ := termproxy.GetWinsize(pty.Fd())
+	myws, _ := termproxy.GetWinsize(command.PTY().Fd())
 
 	if winsize.Height != myws.Height || winsize.Width != myws.Width {
 		// send the clear only in the height case, it will resolve itself with width.
@@ -83,7 +82,7 @@ func compareAndSetWinsize(host string, ws *framing.Winch, pty *os.File, cmd *exe
 			termproxy.WriteClear(os.Stdout)
 		}
 
-		termproxy.SetWinsize(pty.Fd(), winsize)
+		termproxy.SetWinsize(command.PTY().Fd(), winsize)
 
 		connMutex.Lock()
 		for i, c := range connections {
@@ -107,24 +106,24 @@ func compareAndSetWinsize(host string, ws *framing.Winch, pty *os.File, cmd *exe
 	winsizeMutex.Unlock()
 }
 
-func handleWinch(pty *os.File, cmd *exec.Cmd) {
+func handleWinch(command *termproxy.Command) {
 	ws, err := termproxy.GetWinsize(0)
 	if err != nil {
 		termproxy.ErrorOut("Could not retrieve the terminal size: %v", err, termproxy.ErrTerminal)
 	}
 
-	compareAndSetWinsize("localhost", ws, pty, cmd)
+	compareAndSetWinsize("localhost", ws, command)
 }
 
-func setPTYTerminal(pty *os.File, cmd *exec.Cmd) {
+func setPTYTerminal(command *termproxy.Command) {
 	ws, err := termproxy.GetWinsize(0)
 	if err != nil {
 		termproxy.ErrorOut("Could not retrieve the terminal dimensions", err, termproxy.ErrTerminal)
 	}
 
-	compareAndSetWinsize("localhost", ws, pty, cmd)
+	compareAndSetWinsize("localhost", ws, command)
 
-	if err := termproxy.SetWinsize(pty.Fd(), ws); err != nil {
+	if err := termproxy.SetWinsize(command.PTY().Fd(), ws); err != nil {
 		termproxy.ErrorOut("Could not set the terminal size of the PTY", err, termproxy.ErrTerminal)
 	}
 }
@@ -137,7 +136,7 @@ func loadCerts() (tls.Certificate, *x509.CertPool) {
 	return cert, pool
 }
 
-func listen(l net.Listener, pty *os.File, input *bytes.Buffer, cmd *exec.Cmd) {
+func listen(l net.Listener, input *bytes.Buffer, command *termproxy.Command) {
 	for {
 		c, err := l.Accept()
 		if err != nil {
@@ -148,7 +147,7 @@ func listen(l net.Listener, pty *os.File, input *bytes.Buffer, cmd *exec.Cmd) {
 		connections = append(connections, c)
 		connMutex.Unlock()
 
-		go runStreamLoop(c, pty, input, cmd)
+		go runStreamLoop(c, input, command)
 	}
 }
 
@@ -167,32 +166,35 @@ func pruneConnection(writers []net.Conn, i int, err error) ([]net.Conn, error) {
 	return connections, nil
 }
 
+func closeHandler(command *termproxy.Command) {
+	connMutex.Lock()
+	// FIXME sloppy as heck but works for now.
+	for _, conn := range connections {
+		conn.Close()
+	}
+	connMutex.Unlock()
+
+}
+
+func launch(command *termproxy.Command) {
+	if err := command.Run(); err != nil {
+		if err != nil {
+			termproxy.ErrorOut(fmt.Sprintf("Could not start program %s", command.String()), err, termproxy.ErrCommand)
+		}
+	}
+
+	termproxy.ErrorOut("Shell Exited!", nil, 0)
+}
+
 func serve(listenSpec string, cmd string) {
 	termproxy.MakeRaw(0)
 
 	command := termproxy.NewCommand(cmd)
-	command.CloseHandler = func(pty *os.File, cmd *exec.Cmd) {
-		connMutex.Lock()
-		// FIXME sloppy as heck but works for now.
-		for _, conn := range connections {
-			conn.Close()
-		}
-		connMutex.Unlock()
-
-	}
-
+	command.CloseHandler = closeHandler
 	command.PTYSetupHandler = setPTYTerminal
 	command.WinchHandler = handleWinch
 
-	go func(command *termproxy.Command) {
-		if err := command.Run(); err != nil {
-			if err != nil {
-				termproxy.ErrorOut(fmt.Sprintf("Could not start program %s", cmd), err, termproxy.ErrCommand)
-			}
-		}
-
-		termproxy.ErrorOut("Shell Exited!", nil, 0)
-	}(command)
+	go launch(command)
 
 	cert, pool := loadCerts()
 
@@ -214,9 +216,10 @@ func serve(listenSpec string, cmd string) {
 	sigchan := make(chan os.Signal)
 	signal.Notify(sigchan, syscall.SIGWINCH)
 
+	go listen(l, input, command)
+
 	copier := termproxy.NewCopier(nil)
 
-	go listen(l, command.PTY(), input, command.Command())
 	go copier.Copy(input, os.Stdin)
 	go copier.Copy(output, command.PTY())
 
@@ -229,7 +232,7 @@ func serve(listenSpec string, cmd string) {
 	multiCopier.ErrorHandler = pruneConnection
 	multiCopier.Handler = func(buf []byte, writers []net.Conn, reader io.Reader) ([]byte, error) {
 		if _, err := os.Stdout.Write(buf); err != nil {
-			return buf, err
+			return nil, err
 		}
 
 		output.Reset()
@@ -257,7 +260,7 @@ func serve(listenSpec string, cmd string) {
 	termproxy.ErrorOut("Shell Exited!", nil, 0)
 }
 
-func runStreamLoop(c net.Conn, pty *os.File, input io.Writer, cmd *exec.Cmd) {
+func runStreamLoop(c net.Conn, input io.Writer, command *termproxy.Command) {
 	s := &framing.StreamParser{
 		Reader: c,
 		DataHandler: func(data *framing.Data) error {
@@ -265,7 +268,7 @@ func runStreamLoop(c net.Conn, pty *os.File, input io.Writer, cmd *exec.Cmd) {
 			return err
 		},
 		WinchHandler: func(winch *framing.Winch) error {
-			compareAndSetWinsize(c.(*tls.Conn).RemoteAddr().String(), winch, pty, cmd)
+			compareAndSetWinsize(c.(*tls.Conn).RemoteAddr().String(), winch, command)
 			return nil
 		},
 	}

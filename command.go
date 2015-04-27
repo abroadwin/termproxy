@@ -10,9 +10,9 @@ import (
 )
 
 type Command struct {
-	CloseHandler    func(*os.File, *exec.Cmd)
-	PTYSetupHandler func(*os.File, *exec.Cmd)
-	WinchHandler    func(*os.File, *exec.Cmd)
+	CloseHandler    func(*Command)
+	PTYSetupHandler func(*Command)
+	WinchHandler    func(*Command)
 	pty             *os.File
 	command         *exec.Cmd
 	commandString   string
@@ -20,6 +20,10 @@ type Command struct {
 
 func NewCommand(command string) *Command {
 	return &Command{commandString: command}
+}
+
+func (c *Command) String() string {
+	return c.commandString
 }
 
 func (c *Command) PTY() *os.File {
@@ -41,7 +45,7 @@ func (c *Command) Run() error {
 	}
 
 	if c.PTYSetupHandler != nil {
-		c.PTYSetupHandler(c.pty, c.command)
+		c.PTYSetupHandler(c)
 	}
 
 	if c.WinchHandler != nil {
@@ -50,7 +54,7 @@ func (c *Command) Run() error {
 		go func() {
 			for {
 				<-sigchan
-				c.WinchHandler(c.pty, c.command)
+				c.WinchHandler(c)
 			}
 		}()
 	}
@@ -63,7 +67,7 @@ func (c *Command) waitForClose() {
 	c.command.Wait()
 
 	if c.CloseHandler != nil {
-		c.CloseHandler(c.pty, c.command)
+		c.CloseHandler(c)
 	}
 
 	c.pty.Close()
