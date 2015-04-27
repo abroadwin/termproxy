@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
-	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -22,11 +21,8 @@ import (
 var DEBUG = os.Getenv("DEBUG")
 
 var (
-	mutex                = new(sync.Mutex)
-	connMutex            = new(sync.Mutex)
-	winsizeMutex         = new(sync.Mutex)
-	connections          = []net.Conn{}
 	connectionWinsizeMap = map[string]*framing.Winch{}
+	winsizeMutex         = new(sync.Mutex)
 )
 
 var (
@@ -106,76 +102,6 @@ func compareAndSetWinsize(host string, ws *framing.Winch, command *termproxy.Com
 	winsizeMutex.Unlock()
 }
 
-func handleWinch(command *termproxy.Command) {
-	ws, err := termproxy.GetWinsize(0)
-	if err != nil {
-		termproxy.ErrorOut("Could not retrieve the terminal size: %v", err, termproxy.ErrTerminal)
-	}
-
-	compareAndSetWinsize("localhost", ws, command)
-}
-
-func setPTYTerminal(command *termproxy.Command) {
-	ws, err := termproxy.GetWinsize(0)
-	if err != nil {
-		termproxy.ErrorOut("Could not retrieve the terminal dimensions", err, termproxy.ErrTerminal)
-	}
-
-	compareAndSetWinsize("localhost", ws, command)
-
-	if err := termproxy.SetWinsize(command.PTY().Fd(), ws); err != nil {
-		termproxy.ErrorOut("Could not set the terminal size of the PTY", err, termproxy.ErrTerminal)
-	}
-}
-
-func loadCerts() (tls.Certificate, *x509.CertPool) {
-	cert := termproxy.LoadCert(*serverCertPath, *serverKeyPath)
-	pool := x509.NewCertPool()
-	termproxy.LoadCertIntoPool(pool, *caCertPath)
-
-	return cert, pool
-}
-
-func listen(l net.Listener, input *bytes.Buffer, command *termproxy.Command) {
-	for {
-		c, err := l.Accept()
-		if err != nil {
-			continue
-		}
-
-		connMutex.Lock()
-		connections = append(connections, c)
-		connMutex.Unlock()
-
-		go runStreamLoop(c, input, command)
-	}
-}
-
-// presumes the lock has already been acquired
-func pruneConnection(writers []net.Conn, i int, err error) ([]net.Conn, error) {
-	connections := writers[:]
-	delete(connectionWinsizeMap, writers[i].(*tls.Conn).RemoteAddr().String())
-	writers[i].Close()
-
-	if len(connections)+1 > len(connections) {
-		connections = connections[:i]
-	} else {
-		connections = append(connections[:i], connections[i+1:]...)
-	}
-
-	return connections, nil
-}
-
-func closeHandler(command *termproxy.Command) {
-	connMutex.Lock()
-	// FIXME sloppy as heck but works for now.
-	for _, conn := range connections {
-		conn.Close()
-	}
-	connMutex.Unlock()
-
-}
-
 func launch(command *termproxy.Command) {
 	if err := command.Run(); err != nil {
 		if err != nil {
@@ -197,14 +123,7 @@ func serve(listenSpec string, cmd string) {
 	go launch(command)
 
 	cert, pool := loadCerts()
-
-	l, err := tls.Listen("tcp", listenSpec, &tls.Config{
-		RootCAs:      pool,
-		ClientCAs:    pool,
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
-	})
+	listener, err := setupListener(listenSpec, pool, cert)
 
 	if err != nil {
 		termproxy.ErrorOut(fmt.Sprintf("Network Error trying to listen on %s", pflag.Arg(0)), err, termproxy.ErrNetwork)
@@ -216,7 +135,7 @@ func serve(listenSpec string, cmd string) {
 	sigchan := make(chan os.Signal)
 	signal.Notify(sigchan, syscall.SIGWINCH)
 
-	go listen(l, input, command)
+	go listen(listener, input, command)
 
 	copier := termproxy.NewCopier(nil)
 
