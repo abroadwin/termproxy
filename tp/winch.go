@@ -36,16 +36,11 @@ func compareAndSetWinsize(host string, ws *framing.Winch, command *termproxy.Com
 	}
 
 	winsize := &framing.Winch{Height: height, Width: width}
-
 	myws, _ := termproxy.GetWinsize(command.PTY().Fd())
 
 	if winsize.Height != myws.Height || winsize.Width != myws.Width {
 		// send the clear only in the height case, it will resolve itself with width.
-
-		if winsize.Height != myws.Height {
-			termproxy.WriteClear(os.Stdout)
-		}
-
+		termproxy.WriteClear(os.Stdout)
 		termproxy.SetWinsize(command.PTY().Fd(), winsize)
 
 		t.Iterate(func(t *server.TLSServer, conn net.Conn, index int) error {

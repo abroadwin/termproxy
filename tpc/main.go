@@ -131,6 +131,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	os.Setenv("TERM", "screen-256color")
 	c := connect(pflag.Arg(0))
 	writeTermSize(c)
 

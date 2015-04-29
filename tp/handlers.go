@@ -8,7 +8,6 @@ import (
 )
 
 func closeHandler(t *server.TLSServer) func(*termproxy.Command) {
-	// wrap this func to keep uniform handler signatures
 	return func(command *termproxy.Command) {
 		t.Iterate(func(t *server.TLSServer, conn net.Conn, i int) error {
 			conn.Close()
@@ -34,7 +33,6 @@ func setPTYTerminal(t *server.TLSServer) func(*termproxy.Command) {
 
 func handleWinch(t *server.TLSServer) func(*termproxy.Command) {
 	return func(command *termproxy.Command) {
-
 		ws, err := termproxy.GetWinsize(0)
 		if err != nil {
 			termproxy.ErrorOut("Could not retrieve the terminal size: %v", err, termproxy.ErrTerminal)

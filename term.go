@@ -33,8 +33,7 @@ func restoreterminal(fd uintptr, windowState *term.State) error {
 }
 
 func writeclear(out io.Writer) error {
-	// Using all those BBSes in high school really mattered.
-	_, err := out.Write([]byte{27, '[', '2', 'J'})
+	_, err := out.Write([]byte{27, 'c'})
 	return err
 }
 
