@@ -121,7 +121,6 @@ func serve(listenSpec string, cmd string) {
 			continue
 		}
 
-		//ioLock.Lock()
 		buf := output.Bytes()
 
 		if _, err := os.Stdout.Write(buf); err != nil {
@@ -130,7 +129,6 @@ func serve(listenSpec string, cmd string) {
 
 		t.MultiCopy(buf)
 		output.Reset()
-		//ioLock.Unlock()
 	}
 
 	termproxy.ErrorOut("Shell Exited!", nil, 0)
