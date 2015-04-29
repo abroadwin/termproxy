@@ -8,7 +8,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/erikh/termproxy"
@@ -16,6 +15,8 @@ import (
 	"github.com/erikh/termproxy/server"
 	"github.com/ogier/pflag"
 )
+
+const TIME_WAIT = 10 * time.Millisecond
 
 var DEBUG = os.Getenv("DEBUG")
 
@@ -41,6 +42,15 @@ func main() {
 	serve(pflag.Arg(0), pflag.Arg(1))
 }
 
+func setCommand(cmd string, t *server.TLSServer) *termproxy.Command {
+	command := termproxy.NewCommand(cmd)
+	command.CloseHandler = closeHandler(t)
+	command.PTYSetupHandler = setPTYTerminal(t)
+	command.WinchHandler = handleWinch(t)
+
+	return command
+}
+
 func launch(command *termproxy.Command) {
 	if err := command.Run(); err != nil {
 		if err != nil {
@@ -53,19 +63,15 @@ func launch(command *termproxy.Command) {
 
 func serve(listenSpec string, cmd string) {
 	termproxy.MakeRaw(0)
+	os.Setenv("TERM", "screen-256color")
 
-	ioLock := new(sync.Mutex)
 	t, err := server.NewTLSServer(listenSpec, *serverCertPath, *serverKeyPath, *caCertPath)
 
 	if err != nil {
 		termproxy.ErrorOut(fmt.Sprintf("Network Error trying to listen on %s", pflag.Arg(0)), err, termproxy.ErrNetwork)
 	}
 
-	command := termproxy.NewCommand(cmd)
-	command.CloseHandler = closeHandler(t)
-	command.PTYSetupHandler = setPTYTerminal(t)
-	command.WinchHandler = handleWinch(t)
-
+	command := setCommand(cmd, t)
 	go launch(command)
 
 	input := new(bytes.Buffer)
@@ -84,7 +90,7 @@ func serve(listenSpec string, cmd string) {
 
 	go t.Listen()
 
-	ptyCopier := termproxy.NewCopier(ioLock)
+	ptyCopier := termproxy.NewCopier(nil)
 	ptyCopier.Handler = func(buf []byte, w io.Writer, r io.Reader) ([]byte, error) {
 		input.Reset()
 		return buf, nil
@@ -94,30 +100,37 @@ func serve(listenSpec string, cmd string) {
 	inputCopier := termproxy.NewCopier(nil)
 
 	go inputCopier.Copy(input, os.Stdin)
+	go writeOutputPty(outputCopier, output, command)
+	go writePtyInput(ptyCopier, input, command)
 
-	go func() {
-		for {
-			if err := outputCopier.Copy(output, command.PTY()); err != nil {
-				fmt.Println(err)
-			}
-			time.Sleep(10 * time.Millisecond)
+	writePtyOutput(output, t)
+	termproxy.ErrorOut("Shell Exited!", nil, 0)
+}
+
+func writeOutputPty(outputCopier *termproxy.Copier, output *bytes.Buffer, command *termproxy.Command) {
+	for {
+		if err := outputCopier.Copy(output, command.PTY()); err != nil {
+			fmt.Println(err)
 		}
-	}()
+		time.Sleep(TIME_WAIT)
+	}
+}
 
-	go func() {
-		for {
-			if input.Len() == 0 {
-				time.Sleep(10 * time.Millisecond)
-				continue
-			}
-
-			ptyCopier.Copy(command.PTY(), input)
+func writePtyInput(ptyCopier *termproxy.Copier, input *bytes.Buffer, command *termproxy.Command) {
+	for {
+		if input.Len() == 0 {
+			time.Sleep(TIME_WAIT)
+			continue
 		}
-	}()
 
+		ptyCopier.Copy(command.PTY(), input)
+	}
+}
+
+func writePtyOutput(output *bytes.Buffer, t *server.TLSServer) {
 	for {
 		if output.Len() == 0 {
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(TIME_WAIT)
 			continue
 		}
 
@@ -130,8 +143,6 @@ func serve(listenSpec string, cmd string) {
 		t.MultiCopy(buf)
 		output.Reset()
 	}
-
-	termproxy.ErrorOut("Shell Exited!", nil, 0)
 }
 
 func runStreamLoop(c net.Conn, input io.Writer, command *termproxy.Command, t *server.TLSServer) {
