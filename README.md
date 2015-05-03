@@ -14,8 +14,15 @@ $ go get github.com/erikh/termproxy/tp
 
 ## Usage
 
+Server (presumes default settings):
 ```
 tp <host:port> <program>
+```
+
+Client:
+```
+ssh -p <port> scott@host
+# password is 'tiger'
 ```
 
 You will have to supply a host private key to the program so that SSH clients
