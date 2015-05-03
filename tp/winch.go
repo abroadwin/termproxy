@@ -6,20 +6,19 @@ import (
 	"sync"
 
 	"github.com/erikh/termproxy"
-	"github.com/erikh/termproxy/framing"
 	"github.com/erikh/termproxy/server"
 )
 
 var (
-	connectionWinsizeMap = map[string]*framing.Winch{}
+	connectionWinsizeMap = map[string]termproxy.Winch{}
 	winsizeMutex         = new(sync.Mutex)
 )
 
-func compareAndSetWinsize(host string, ws *framing.Winch, command *termproxy.Command, t *server.TLSServer) {
+func compareAndSetWinsize(host string, ws termproxy.Winch, command *termproxy.Command, s *server.SSHServer) {
 	winsizeMutex.Lock()
 	connectionWinsizeMap[host] = ws
 
-	var height, width uint16
+	var height, width uint
 
 	for _, wm := range connectionWinsizeMap {
 		if height == 0 || width == 0 {
@@ -35,16 +34,27 @@ func compareAndSetWinsize(host string, ws *framing.Winch, command *termproxy.Com
 		}
 	}
 
-	winsize := &framing.Winch{Height: height, Width: width}
 	myws, _ := termproxy.GetWinsize(command.PTY().Fd())
 
-	if winsize.Height != myws.Height || winsize.Width != myws.Width {
+	if ws.Height != myws.Height || ws.Width != myws.Width {
 		// send the clear only in the height case, it will resolve itself with width.
 		termproxy.WriteClear(os.Stdout)
-		termproxy.SetWinsize(command.PTY().Fd(), winsize)
+		termproxy.SetWinsize(command.PTY().Fd(), ws)
 
-		t.Iterate(func(t *server.TLSServer, conn net.Conn, index int) error {
-			return winsize.WriteTo(conn)
+		s.Iterate(func(s *server.SSHServer, c net.Conn, index int) error {
+			payload := []byte{
+				0, 0, byte(ws.Width >> 8 & 0xFF), byte(ws.Width & 0xFF),
+				0, 0, byte(ws.Height >> 8 & 0xFF), byte(ws.Height & 0xFF),
+				0, 0, 0, 0,
+				0, 0, 0, 0,
+			}
+
+			c.(*server.Conn).SendRequest("window-change", false, payload)
+			if ws.Height != myws.Height {
+				c.Write([]byte{27, 'c'})
+			}
+
+			return nil
 		})
 	}
 

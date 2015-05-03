@@ -17,7 +17,7 @@ var ErrorOut func(string, error, int) = errorout
 
 func errorout(msg string, err error, exitcode int) {
 	if err != nil {
-		fmt.Println(fmt.Sprintf(msg+": %v", err))
+		msg = fmt.Sprintf(msg+": %v", err)
 	}
 
 	if windowState != nil {
