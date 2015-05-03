@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	term "github.com/erikh/termproxy/dockerterm"
-	"github.com/erikh/termproxy/framing"
 )
 
 var (
@@ -21,11 +20,11 @@ func setWindowState(state *term.State) {
 }
 
 var (
-	MakeRaw         func(uintptr)                         = makeraw
-	GetWinsize      func(uintptr) (*framing.Winch, error) = getwinsize
-	SetWinsize      func(uintptr, *framing.Winch) error   = setwinsize
-	WriteClear      func(io.Writer) error                 = writeclear
-	RestoreTerminal func(uintptr, *term.State) error      = restoreterminal
+	MakeRaw         func(uintptr)                    = makeraw
+	GetWinsize      func(uintptr) (Winch, error)     = getwinsize
+	SetWinsize      func(uintptr, Winch) error       = setwinsize
+	WriteClear      func(io.Writer) error            = writeclear
+	RestoreTerminal func(uintptr, *term.State) error = restoreterminal
 )
 
 func restoreterminal(fd uintptr, windowState *term.State) error {
@@ -46,17 +45,15 @@ func makeraw(fd uintptr) {
 	setWindowState(windowState)
 }
 
-func getwinsize(fd uintptr) (*framing.Winch, error) {
+func getwinsize(fd uintptr) (Winch, error) {
 	ws, err := term.GetWinsize(fd)
 	if err != nil {
-		return nil, err
+		return Winch{}, err
 	}
 
-	return &framing.Winch{Height: ws.Height, Width: ws.Width}, nil
+	return Winch{Height: uint(ws.Height), Width: uint(ws.Width)}, nil
 }
 
-func setwinsize(fd uintptr, winch *framing.Winch) error {
-	ws := &term.Winsize{Height: winch.Height, Width: winch.Width}
-
-	return term.SetWinsize(fd, ws)
+func setwinsize(fd uintptr, winch Winch) error {
+	return term.SetWinsize(fd, winch.ToWinsize())
 }

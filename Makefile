@@ -1,9 +1,6 @@
 test:
 	go test -v ./...
 
-cert:
-	sh generate_cert.sh
-
 dist:
 	sh dist.sh
 

@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/erikh/termproxy"
-	"github.com/erikh/termproxy/framing"
 	"github.com/erikh/termproxy/server"
 	"github.com/ogier/pflag"
 )
@@ -21,14 +19,14 @@ const TIME_WAIT = 10 * time.Millisecond
 var DEBUG = os.Getenv("DEBUG")
 
 var (
-	caCertPath     = pflag.String("ca", "ca.crt", "Path to CA Certificate")
-	serverCertPath = pflag.StringP("cert", "c", "server.crt", "Path to server certificate")
-	serverKeyPath  = pflag.StringP("key", "k", "server.key", "Path to server key")
+	usernameFlag = pflag.StringP("username", "u", "scott", "Username for SSH")
+	passwordFlag = pflag.StringP("password", "p", "tiger", "Password for SSH")
+	hostkeyFlag  = pflag.StringP("host-key", "k", "host_key_rsa", "SSH private host key to present to clients")
 )
 
 func main() {
 	pflag.Usage = func() {
-		fmt.Printf("usage: %s <options> [host] [program]\n", filepath.Base(os.Args[0]))
+		fmt.Printf("usage: %s <options> [listenSpec] [program]\n", filepath.Base(os.Args[0]))
 		pflag.PrintDefaults()
 		os.Exit(int(termproxy.ErrUsage))
 	}
@@ -42,11 +40,11 @@ func main() {
 	serve(pflag.Arg(0), pflag.Arg(1))
 }
 
-func setCommand(cmd string, t *server.TLSServer) *termproxy.Command {
+func setCommand(cmd string, s *server.SSHServer) *termproxy.Command {
 	command := termproxy.NewCommand(cmd)
-	command.CloseHandler = closeHandler(t)
-	command.PTYSetupHandler = setPTYTerminal(t)
-	command.WinchHandler = handleWinch(t)
+	command.CloseHandler = closeHandler(s)
+	command.PTYSetupHandler = setPTYTerminal(s)
+	command.WinchHandler = handleWinch(s)
 
 	return command
 }
@@ -65,52 +63,59 @@ func serve(listenSpec string, cmd string) {
 	termproxy.MakeRaw(0)
 	os.Setenv("TERM", "screen-256color")
 
-	t, err := server.NewTLSServer(listenSpec, *serverCertPath, *serverKeyPath, *caCertPath)
+	s, err := server.NewSSHServer(listenSpec, *usernameFlag, *passwordFlag, *hostkeyFlag)
 
 	if err != nil {
 		termproxy.ErrorOut(fmt.Sprintf("Network Error trying to listen on %s", pflag.Arg(0)), err, termproxy.ErrNetwork)
 	}
 
-	command := setCommand(cmd, t)
+	command := setCommand(cmd, s)
 	go launch(command)
 
 	input := new(bytes.Buffer)
 	output := new(bytes.Buffer)
 
-	t.AcceptHandler = func(c net.Conn) {
-		go runStreamLoop(c, input, command, t)
-	}
-
-	t.CloseHandler = func(conn net.Conn) {
-		winsizeMutex.Lock()
-		delete(connectionWinsizeMap, conn.(*tls.Conn).RemoteAddr().String())
-		winsizeMutex.Unlock()
-		conn.Close()
-	}
-
-	go t.Listen()
-
-	ptyCopier := termproxy.NewCopier(nil)
+	ptyCopier := termproxy.NewCopier()
 	ptyCopier.Handler = func(buf []byte, w io.Writer, r io.Reader) ([]byte, error) {
 		input.Reset()
 		return buf, nil
 	}
 
-	outputCopier := termproxy.NewCopier(nil)
-	inputCopier := termproxy.NewCopier(nil)
+	outputCopier := termproxy.NewCopier()
+	inputCopier := termproxy.NewCopier()
 
 	go inputCopier.Copy(input, os.Stdin)
 	go writeOutputPty(outputCopier, output, command)
 	go writePtyInput(ptyCopier, input, command)
+	go writePtyOutput(output, s)
 
-	writePtyOutput(output, t)
+	s.AcceptHandler = func(c net.Conn) {
+		inputCopier.Copy(input, c)
+	}
+
+	s.CloseHandler = func(conn net.Conn) {
+		winsizeMutex.Lock()
+		delete(connectionWinsizeMap, conn.RemoteAddr().String())
+		winsizeMutex.Unlock()
+		conn.Close()
+	}
+
+	go func() {
+		for {
+			myWinch := <-s.InWinch
+			compareAndSetWinsize(myWinch.Conn.RemoteAddr().String(), myWinch, command, s)
+		}
+	}()
+
+	s.Listen()
+
 	termproxy.ErrorOut("Shell Exited!", nil, 0)
 }
 
 func writeOutputPty(outputCopier *termproxy.Copier, output *bytes.Buffer, command *termproxy.Command) {
 	for {
 		if err := outputCopier.Copy(output, command.PTY()); err != nil {
-			fmt.Println(err)
+			continue
 		}
 		time.Sleep(TIME_WAIT)
 	}
@@ -127,7 +132,7 @@ func writePtyInput(ptyCopier *termproxy.Copier, input *bytes.Buffer, command *te
 	}
 }
 
-func writePtyOutput(output *bytes.Buffer, t *server.TLSServer) {
+func writePtyOutput(output *bytes.Buffer, t *server.SSHServer) {
 	for {
 		if output.Len() == 0 {
 			time.Sleep(TIME_WAIT)
@@ -143,20 +148,4 @@ func writePtyOutput(output *bytes.Buffer, t *server.TLSServer) {
 		t.MultiCopy(buf)
 		output.Reset()
 	}
-}
-
-func runStreamLoop(c net.Conn, input io.Writer, command *termproxy.Command, t *server.TLSServer) {
-	s := &framing.StreamParser{
-		Reader: c,
-		DataHandler: func(data *framing.Data) error {
-			_, err := io.Copy(input, bytes.NewBuffer(data.Data))
-			return err
-		},
-		WinchHandler: func(winch *framing.Winch) error {
-			compareAndSetWinsize(c.(*tls.Conn).RemoteAddr().String(), winch, command, t)
-			return nil
-		},
-	}
-
-	s.Loop()
 }
