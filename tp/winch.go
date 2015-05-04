@@ -51,7 +51,7 @@ func compareAndSetWinsize(host string, ws termproxy.Winch, command *termproxy.Co
 
 			c.(*server.Conn).SendRequest("window-change", false, payload)
 			if ws.Height != myws.Height {
-				c.Write([]byte{27, 'c'})
+				termproxy.WriteClear(c)
 			}
 
 			return nil
