@@ -36,7 +36,7 @@ func compareAndSetWinsize(host string, ws termproxy.Winch, command *termproxy.Co
 
 	myws, _ := termproxy.GetWinsize(command.PTY().Fd())
 
-	if ws.Height != myws.Height || ws.Width != myws.Width {
+	if height != myws.Height || width != myws.Width {
 		// send the clear only in the height case, it will resolve itself with width.
 		termproxy.WriteClear(os.Stdout)
 		termproxy.SetWinsize(command.PTY().Fd(), ws)

@@ -129,8 +129,6 @@ func (s *SSHServer) Listen() {
 							height |= uint(req.Payload[i])
 						}
 
-						fmt.Println(req.Payload)
-
 						s.InWinch <- termproxy.Winch{conn, width, height}
 						req.Reply(true, nil)
 					case "pty-req":

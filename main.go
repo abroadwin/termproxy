@@ -90,6 +90,9 @@ func serve(listenSpec string, cmd string) {
 	go writePtyOutput(output, s)
 
 	s.AcceptHandler = func(c net.Conn) {
+		c.Write([]byte("Connected to server\n"))
+		time.Sleep(1 * time.Second)
+		termproxy.WriteClear(c)
 		inputCopier.Copy(input, c)
 	}
 
