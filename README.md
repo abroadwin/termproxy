@@ -6,6 +6,18 @@ termproxy is a shared program tool. It allows you to start the program of your
 choice (a shell, vim/emacs, etc) and allows others to connect and interact with
 it with SSH. The intended use case is pairing.
 
+## Try quickly with docker
+
+```bash
+$ docker run -p 1234:1234 -it termproxy
+```
+
+(in another window)
+
+```bash
+$ ssh -p 1234 scott@localhost
+```
+
 ## Installation
 
 ```bash
