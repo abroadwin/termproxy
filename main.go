@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/erikh/termproxy"
 	"github.com/erikh/termproxy/server"
+	"github.com/erikh/termproxy/termproxy"
 	"github.com/ogier/pflag"
 )
 

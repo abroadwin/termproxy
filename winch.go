@@ -5,8 +5,8 @@ import (
 	"os"
 	"sync"
 
-	"github.com/erikh/termproxy"
 	"github.com/erikh/termproxy/server"
+	"github.com/erikh/termproxy/termproxy"
 )
 
 var (

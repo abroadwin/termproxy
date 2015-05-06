@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/erikh/termproxy"
+	"github.com/erikh/termproxy/termproxy"
 	"golang.org/x/crypto/ssh"
 )
 

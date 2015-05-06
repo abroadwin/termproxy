@@ -3,8 +3,8 @@ package main
 import (
 	"net"
 
-	"github.com/erikh/termproxy"
 	"github.com/erikh/termproxy/server"
+	"github.com/erikh/termproxy/termproxy"
 )
 
 func closeHandler(s *server.SSHServer) func(*termproxy.Command) {
