@@ -9,20 +9,7 @@ it with SSH. The intended use case is pairing.
 ## Installation
 
 ```bash
-$ go get github.com/erikh/termproxy/tp
-```
-
-## Usage
-
-Server (presumes default settings):
-```
-tp <host:port> <program>
-```
-
-Client:
-```
-ssh -p <port> scott@host
-# password is 'tiger'
+$ go get github.com/erikh/termproxy
 ```
 
 You will have to supply a host private key to the program so that SSH clients
@@ -30,7 +17,20 @@ can connect to it. Do this by supplying the `-k` option. Generating this is
 just like generating any ssh key:
 
 ```bash
-$ ssh-keygen -t rsa -b 4096 -f host_key_rsa
+$ ssh-keygen -t rsa -b 4096 -f host_key_rsa -N ''
+```
+
+## Usage
+
+Server (presumes default settings):
+```
+termproxy <host:port> <program>
+```
+
+Client:
+```
+ssh -p <port> scott@host
+# password is 'tiger'
 ```
 
 There are also options to change the default username `-u` and password `-p`,
