@@ -3,12 +3,12 @@
 VERSION=$(cat VERSION)
 mypwd=${PWD}
 
-for arch in linux darwin freebsd
+for os in linux darwin freebsd
 do
-	mkdir -p /tmp/termproxy-${arch}-${VERSION} && \
-	cd /tmp/termproxy-${arch}-${VERSION} && \
-	GOOS=$i go build github.com/erikh/termproxy && \
+	mkdir -p /tmp/termproxy-${os}-${VERSION} && \
+	cd /tmp/termproxy-${os}-${VERSION} && \
+	GOOS=$os GOARCH=amd64 go build github.com/erikh/termproxy && \
 	cd .. && \
-	tar cvzf termproxy-${arch}-${VERSION}.tar.gz termproxy-${arch}-${VERSION} && \
-  cp termproxy-${arch}-${VERSION}.tar.gz ${mypwd}	
+	tar cvzf termproxy-${os}-${VERSION}.tar.gz termproxy-${os}-${VERSION} && \
+  cp termproxy-${os}-${VERSION}.tar.gz ${mypwd}	
 done
