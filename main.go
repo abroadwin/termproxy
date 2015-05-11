@@ -6,38 +6,33 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/erikh/termproxy/server"
 	"github.com/erikh/termproxy/termproxy"
+	"github.com/jawher/mow.cli"
 	"github.com/ogier/pflag"
 )
 
 const TIME_WAIT = 10 * time.Millisecond
 
-var DEBUG = os.Getenv("DEBUG")
-
-var (
-	usernameFlag = pflag.StringP("username", "u", "scott", "Username for SSH")
-	passwordFlag = pflag.StringP("password", "p", "tiger", "Password for SSH")
-	hostkeyFlag  = pflag.StringP("host-key", "k", "host_key_rsa", "SSH private host key to present to clients")
-)
+var usernameFlag, passwordFlag, hostkeyFlag *string
 
 func main() {
-	pflag.Usage = func() {
-		fmt.Printf("usage: %s <options> [listenSpec] [program]\n", filepath.Base(os.Args[0]))
-		pflag.PrintDefaults()
-		os.Exit(int(termproxy.ErrUsage))
+	tp := cli.App("termproxy", "Proxy your terminal over SSH to others")
+
+	usernameFlag = tp.StringOpt("u username", "scott", "Username for SSH")
+	passwordFlag = tp.StringOpt("p password", "tiger", "Password for SSH")
+	hostkeyFlag = tp.StringOpt("k host-key", "host_key_rsa", "SSH private host key to present to clients")
+
+	listenSpec := tp.StringArg("LISTEN", "0.0.0.0:1234", "The host:port to listen for SSH")
+	command := tp.StringArg("COMMAND", "/bin/sh", "The program to run inside termproxy")
+
+	tp.Action = func() {
+		serve(*listenSpec, *command)
 	}
 
-	pflag.Parse()
-
-	if pflag.NArg() != 2 {
-		pflag.Usage()
-	}
-
-	serve(pflag.Arg(0), pflag.Arg(1))
+	tp.Run(os.Args)
 }
 
 func setCommand(cmd string, s *server.SSHServer) *termproxy.Command {
