@@ -15,7 +15,10 @@ import (
 
 const TIME_WAIT = 10 * time.Millisecond
 
-var usernameFlag, passwordFlag, hostkeyFlag *string
+var (
+	usernameFlag, passwordFlag, hostkeyFlag *string
+	readOnly                                *bool
+)
 
 func main() {
 	tp := cli.App("termproxy", "Proxy your terminal over SSH to others")
@@ -23,6 +26,7 @@ func main() {
 	usernameFlag = tp.StringOpt("u username", "scott", "Username for SSH")
 	passwordFlag = tp.StringOpt("p password", "tiger", "Password for SSH")
 	hostkeyFlag = tp.StringOpt("k host-key", "host_key_rsa", "SSH private host key to present to clients")
+	readOnly = tp.BoolOpt("r read-only", false, "Disallow remote clients from entering input")
 
 	listenSpec := tp.StringArg("LISTEN", "0.0.0.0:1234", "The host:port to listen for SSH")
 	command := tp.StringArg("COMMAND", "/bin/sh", "The program to run inside termproxy")
@@ -87,7 +91,9 @@ func serve(listenSpec string, cmd string) {
 		c.Write([]byte("Connected to server\n"))
 		time.Sleep(1 * time.Second)
 		termproxy.WriteClear(c)
-		inputCopier.Copy(input, c)
+		if !*readOnly {
+			inputCopier.Copy(input, c)
+		}
 	}
 
 	s.CloseHandler = func(conn net.Conn) {
