@@ -101,7 +101,7 @@ func serve(listenSpec string, cmd string) {
 		winsizeMutex.Lock()
 		delete(connectionWinsizeMap, conn.RemoteAddr().String())
 		winsizeMutex.Unlock()
-		conn.Close()
+		termproxy.WriteTop(output, fmt.Sprintf("%s disconnected\n", conn.RemoteAddr().String()))
 	}
 
 	go func() {

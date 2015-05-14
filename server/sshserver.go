@@ -85,7 +85,7 @@ func (s *SSHServer) Listen() {
 			continue
 		}
 
-		_, chans, reqs, err := ssh.NewServerConn(c, s.sshConfig)
+		serverConn, chans, reqs, err := ssh.NewServerConn(c, s.sshConfig)
 		if err != nil {
 			continue
 		}
@@ -150,6 +150,12 @@ func (s *SSHServer) Listen() {
 			}
 
 			go s.AcceptHandler(conn)
+			go func() {
+				serverConn.Wait()
+				serverConn.Close()
+				conn.Close()
+				s.CloseHandler(conn)
+			}()
 
 			break
 		}
