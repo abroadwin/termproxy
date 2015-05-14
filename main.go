@@ -6,38 +6,36 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/erikh/termproxy/server"
 	"github.com/erikh/termproxy/termproxy"
-	"github.com/ogier/pflag"
+	"github.com/jawher/mow.cli"
 )
 
 const TIME_WAIT = 10 * time.Millisecond
 
-var DEBUG = os.Getenv("DEBUG")
-
 var (
-	usernameFlag = pflag.StringP("username", "u", "scott", "Username for SSH")
-	passwordFlag = pflag.StringP("password", "p", "tiger", "Password for SSH")
-	hostkeyFlag  = pflag.StringP("host-key", "k", "host_key_rsa", "SSH private host key to present to clients")
+	usernameFlag, passwordFlag, hostkeyFlag *string
+	readOnly                                *bool
 )
 
 func main() {
-	pflag.Usage = func() {
-		fmt.Printf("usage: %s <options> [listenSpec] [program]\n", filepath.Base(os.Args[0]))
-		pflag.PrintDefaults()
-		os.Exit(int(termproxy.ErrUsage))
+	tp := cli.App("termproxy", "Proxy your terminal over SSH to others")
+
+	usernameFlag = tp.StringOpt("u username", "scott", "Username for SSH")
+	passwordFlag = tp.StringOpt("p password", "tiger", "Password for SSH")
+	hostkeyFlag = tp.StringOpt("k host-key", "host_key_rsa", "SSH private host key to present to clients")
+	readOnly = tp.BoolOpt("r read-only", false, "Disallow remote clients from entering input")
+
+	listenSpec := tp.StringArg("LISTEN", "0.0.0.0:1234", "The host:port to listen for SSH")
+	command := tp.StringArg("COMMAND", "/bin/sh", "The program to run inside termproxy")
+
+	tp.Action = func() {
+		serve(*listenSpec, *command)
 	}
 
-	pflag.Parse()
-
-	if pflag.NArg() != 2 {
-		pflag.Usage()
-	}
-
-	serve(pflag.Arg(0), pflag.Arg(1))
+	tp.Run(os.Args)
 }
 
 func setCommand(cmd string, s *server.SSHServer) *termproxy.Command {
@@ -66,7 +64,7 @@ func serve(listenSpec string, cmd string) {
 	s, err := server.NewSSHServer(listenSpec, *usernameFlag, *passwordFlag, *hostkeyFlag)
 
 	if err != nil {
-		termproxy.ErrorOut(fmt.Sprintf("Network Error trying to listen on %s", pflag.Arg(0)), err, termproxy.ErrNetwork)
+		termproxy.ErrorOut(fmt.Sprintf("Network Error trying to listen on %s", listenSpec), err, termproxy.ErrNetwork)
 	}
 
 	command := setCommand(cmd, s)
@@ -93,7 +91,9 @@ func serve(listenSpec string, cmd string) {
 		c.Write([]byte("Connected to server\n"))
 		time.Sleep(1 * time.Second)
 		termproxy.WriteClear(c)
-		inputCopier.Copy(input, c)
+		if !*readOnly {
+			inputCopier.Copy(input, c)
+		}
 	}
 
 	s.CloseHandler = func(conn net.Conn) {
