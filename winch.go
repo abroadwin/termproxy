@@ -34,29 +34,32 @@ func compareAndSetWinsize(host string, ws termproxy.Winch, command *termproxy.Co
 		}
 	}
 
-	myws, _ := termproxy.GetWinsize(command.PTY().Fd())
+	// send the clear only in the height case, it will resolve itself with width.
+	myws, _ := termproxy.GetWinsize(0)
 
-	if height != myws.Height || width != myws.Width {
-		// send the clear only in the height case, it will resolve itself with width.
-		termproxy.WriteClear(os.Stdout)
-		termproxy.SetWinsize(command.PTY().Fd(), ws)
-
+	if myws.Height != height {
 		s.Iterate(func(s *server.SSHServer, c net.Conn, index int) error {
-			payload := []byte{
-				0, 0, byte(ws.Width >> 8 & 0xFF), byte(ws.Width & 0xFF),
-				0, 0, byte(ws.Height >> 8 & 0xFF), byte(ws.Height & 0xFF),
-				0, 0, 0, 0,
-				0, 0, 0, 0,
-			}
-
-			c.(*server.Conn).SendRequest("window-change", false, payload)
-			if ws.Height != myws.Height {
-				termproxy.WriteClear(c)
-			}
-
+			termproxy.WriteClear(c)
 			return nil
 		})
+
+		termproxy.WriteClear(os.Stdout)
 	}
+
+	termproxy.SetWinsize(command.PTY().Fd(), termproxy.Winch{Height: height, Width: width})
+	termproxy.SetWinsize(0, termproxy.Winch{Height: height, Width: width})
+
+	s.Iterate(func(s *server.SSHServer, c net.Conn, index int) error {
+		payload := []byte{
+			0, 0, byte(ws.Width >> 8 & 0xFF), byte(ws.Width & 0xFF),
+			0, 0, byte(ws.Height >> 8 & 0xFF), byte(ws.Height & 0xFF),
+			0, 0, 0, 0,
+			0, 0, 0, 0,
+		}
+
+		c.(*server.Conn).SendRequest("window-change", false, payload)
+		return nil
+	})
 
 	winsizeMutex.Unlock()
 }

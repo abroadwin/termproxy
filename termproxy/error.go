@@ -22,9 +22,15 @@ func errorout(msg string, err error, exitcode int) {
 
 	if windowState != nil {
 		windowStateMutex.Lock()
+
 		if err := RestoreTerminal(0, windowState); err != nil {
 			Exit(fmt.Sprintf("Could not restore terminal during termination: %v", err), ErrTerminal)
 		}
+
+		if err := SetWinsize(0, winsize); err != nil {
+			Exit(fmt.Sprintf("Could not restore terminal dimensions during termination: %v", err), ErrTerminal)
+		}
+
 		windowStateMutex.Unlock()
 	}
 

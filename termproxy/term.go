@@ -13,12 +13,14 @@ import (
 var (
 	windowStateMutex sync.Mutex
 	windowState      *term.State
+	winsize          Winch
 )
 
 var posRegex = regexp.MustCompile("\027[(0-9]+;[0-9]+R")
 
-func setWindowState(state *term.State) {
+func setWindowState(state *term.State, size Winch) {
 	windowStateMutex.Lock()
+	winsize = size
 	windowState = state
 	windowStateMutex.Unlock()
 }
@@ -42,12 +44,17 @@ func writeclear(out io.Writer) error {
 }
 
 func makeraw(fd uintptr) {
+	winsize, err := GetWinsize(fd)
+	if err != nil {
+		Exit(fmt.Sprintf("Could not retrieve terminal information: %v", err), ErrTerminal)
+	}
+
 	windowState, err := term.MakeRaw(fd)
 	if err != nil {
 		Exit(fmt.Sprintf("Could not create a raw terminal: %v", err), ErrTerminal)
 	}
 
-	setWindowState(windowState)
+	setWindowState(windowState, winsize)
 }
 
 func getwinsize(fd uintptr) (Winch, error) {
