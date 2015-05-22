@@ -4,12 +4,21 @@
 
 termproxy is a shared program tool. It allows you to start the program of your
 choice (a shell, vim/emacs, etc) and allows others to connect and interact with
-it with SSH. The intended use case is pairing.
+it via SSH. The intended use case is pairing.
 
-## Try quickly with docker
+## Features
+
+* Share a terminal with your friends or collagues over SSH.
+  * start any program -- when it exits, it will terminate the SSH server too.
+  * Terminals are resized to fit everyone's terminal on a new connection.
+* Notifications on connection (set `-n=false` to disable).
+* Read-only mode for connectors: `-r`
+  * present a terminal to others instead of sharing it with them.
+
+## Try quickly with Docker
 
 ```bash
-$ docker run -p 1234:1234 -it termproxy
+$ docker run -p 1234:1234 -it erikh/termproxy
 ```
 
 (in another window)
@@ -18,8 +27,9 @@ $ docker run -p 1234:1234 -it termproxy
 $ ssh -p 1234 scott@localhost
 ```
 
-Note that the standard SSH termination is `~.`. You can enter this on the SSH
-side to disconnect from termproxy without stopping the shared program.
+Note that the standard SSH connection termination sequence is `~.`. You can
+enter this on the SSH side to disconnect from termproxy without stopping the
+shared program.
 
 ## Installation
 
