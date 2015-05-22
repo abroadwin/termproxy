@@ -18,6 +18,9 @@ $ docker run -p 1234:1234 -it termproxy
 $ ssh -p 1234 scott@localhost
 ```
 
+Note that the standard SSH termination is `~.`. You can enter this on the SSH
+side to disconnect from termproxy without stopping the shared program.
+
 ## Installation
 
 ```bash
@@ -31,6 +34,9 @@ just like generating any ssh key:
 ```bash
 $ ssh-keygen -t rsa -b 4096 -f host_key_rsa -N ''
 ```
+
+Will work for termproxy as long as it is in the directory termproxy is launched
+in.
 
 ## Usage
 
