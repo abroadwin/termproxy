@@ -95,9 +95,6 @@ func serve(listenSpec string, cmd string) {
 			termproxy.WriteTop(output, fmt.Sprintf("%s connected\n", c.RemoteAddr().String()))
 		}
 
-		time.Sleep(1 * time.Second)
-		termproxy.WriteClear(c)
-
 		if !*readOnly {
 			inputCopier.Copy(input, c)
 		}
