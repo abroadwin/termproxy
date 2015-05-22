@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -117,21 +119,30 @@ func (s *SSHServer) Listen() {
 					ok := false
 					switch req.Type {
 					case "window-change":
-						var width, height uint
-
-						for i := uint(0); i < 4; i++ {
-							width <<= 8
-							width |= uint(req.Payload[i])
+						winch, err := readWinchPayload(req.Payload)
+						if err != nil {
+							req.Reply(false, nil)
+							continue
 						}
 
-						for i := uint(4); i < 8; i++ {
-							height <<= 8
-							height |= uint(req.Payload[i])
-						}
-
-						s.InWinch <- termproxy.Winch{conn, width, height}
+						winch.Conn = conn
+						s.InWinch <- winch
 						req.Reply(true, nil)
 					case "pty-req":
+						split := bytes.SplitN(req.Payload[4:], []byte{0}, 2)
+						// the nul termination split up here chops a byte off the head of
+						// our filtered payload. We don't actually care about this byte as
+						// terminals are still not large enough to cap 32bits. :)
+						// just append a zero to make uint32 happy and move on.
+						payload := append([]byte{0}, split[1]...)
+						winch, err := readWinchPayload(payload)
+						if err != nil {
+							req.Reply(false, nil)
+							continue
+						}
+
+						winch.Conn = conn
+						s.InWinch <- winch
 						req.Reply(true, nil)
 					case "shell":
 						ok = true
@@ -192,4 +203,26 @@ func (s *SSHServer) MultiCopy(buf []byte) {
 			s.Prune(i)
 		}
 	}
+}
+
+func readWinchPayload(payload []byte) (termproxy.Winch, error) {
+	buf := bytes.NewBuffer(payload)
+	if buf.Len() < 8 {
+		return termproxy.Winch{}, fmt.Errorf("Could not read payload for winch")
+	}
+
+	tmp := make([]byte, 4)
+	c, err := buf.Read(tmp)
+	if c != 4 || err != nil {
+		return termproxy.Winch{}, fmt.Errorf("Could not read payload for winch")
+	}
+
+	width := binary.BigEndian.Uint32(tmp)
+	c, err = buf.Read(tmp)
+	if c != 4 || err != nil {
+		return termproxy.Winch{}, fmt.Errorf("Could not read payload for winch")
+	}
+	height := binary.BigEndian.Uint32(tmp)
+
+	return termproxy.Winch{Width: uint(width), Height: uint(height)}, nil
 }
