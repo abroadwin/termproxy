@@ -89,10 +89,12 @@ func serve(listenSpec string, cmd string) {
 	go writePtyOutput(output, s)
 
 	s.AcceptHandler = func(c net.Conn) {
-		c.Write([]byte("Connected to server\n"))
+		c.Write([]byte("Connected to server (the screen will update on next output)\n"))
 
 		if *notifications {
 			termproxy.WriteTop(output, fmt.Sprintf("%s connected\n", c.RemoteAddr().String()))
+			time.Sleep(1 * time.Second)
+			termproxy.WriteTop(output, string([]byte{27, '[', 'K'}))
 		}
 
 		if !*readOnly {
