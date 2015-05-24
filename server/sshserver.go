@@ -34,7 +34,7 @@ func defaultCloseHandler(conn net.Conn) {
 	conn.Close()
 }
 
-func NewSSHServer(listenSpec, username, password, privateKey string) (*SSHServer, error) {
+func NewSSHServer(listenSpec, username, password, authorizedKeys, privateKey string) (*SSHServer, error) {
 	listener, err := net.Listen("tcp", listenSpec)
 	if err != nil {
 		return nil, err
@@ -48,20 +48,46 @@ func NewSSHServer(listenSpec, username, password, privateKey string) (*SSHServer
 		copier:       termproxy.NewCopier(),
 	}
 
-	if err := srv.initSSH(username, password, privateKey); err != nil {
+	if err := srv.initSSH(username, password, authorizedKeys, privateKey); err != nil {
 		return nil, err
 	}
 
 	return srv, nil
 }
 
-func (s *SSHServer) initSSH(username, password, privateKey string) error {
+func (s *SSHServer) initSSH(username, password, authorizedKeys, privateKey string) error {
+	pubKeys := []ssh.PublicKey{}
+
+	if authorizedKeys != "" {
+		keysFile, err := ioutil.ReadFile(authorizedKeys)
+		if err != nil {
+			return fmt.Errorf("Could not parse authorized keys file %s: %v", authorizedKeys, err)
+		}
+
+		for _, key := range bytes.Split(keysFile, []byte{'\n'}) {
+			parsed, _, _, _, err := ssh.ParseAuthorizedKey(key)
+			if err != nil {
+				return fmt.Errorf("could not parse public key: %v", err)
+			}
+
+			pubKeys = append(pubKeys, parsed)
+		}
+	}
+
 	s.sshConfig = &ssh.ServerConfig{
 		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
 			if c.User() == username && string(pass) == password {
 				return nil, nil
 			}
 			return nil, fmt.Errorf("password rejected for %q", c.User())
+		},
+		PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			for _, pubKey := range pubKeys {
+				if bytes.Equal(key.Marshal(), pubKey.Marshal()) {
+					return nil, nil
+				}
+			}
+			return nil, fmt.Errorf("Public key authentication rejected")
 		},
 	}
 

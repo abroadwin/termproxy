@@ -2,3 +2,4 @@
 *.key
 *.crt
 host_key_rsa*
+authorized_keys

@@ -16,8 +16,8 @@ import (
 const TIME_WAIT = 10 * time.Millisecond
 
 var (
-	usernameFlag, passwordFlag, hostkeyFlag *string
-	readOnly, notifications                 *bool
+	usernameFlag, passwordFlag, hostkeyFlag, authorizedKeysFlag *string
+	readOnly, notifications                                     *bool
 )
 
 func main() {
@@ -26,6 +26,7 @@ func main() {
 	usernameFlag = tp.StringOpt("u username", "scott", "Username for SSH")
 	passwordFlag = tp.StringOpt("p password", "tiger", "Password for SSH")
 	hostkeyFlag = tp.StringOpt("k host-key", "host_key_rsa", "SSH private host key to present to clients")
+	authorizedKeysFlag = tp.StringOpt("a authorized-keys", "", "SSH private host key to present to clients")
 	readOnly = tp.BoolOpt("r read-only", false, "Disallow remote clients from entering input")
 	notifications = tp.BoolOpt("n notifications", true, "Print notifications on connection and disconnection")
 
@@ -62,7 +63,7 @@ func serve(listenSpec string, cmd string) {
 	termproxy.MakeRaw(0)
 	os.Setenv("TERM", "screen-256color")
 
-	s, err := server.NewSSHServer(listenSpec, *usernameFlag, *passwordFlag, *hostkeyFlag)
+	s, err := server.NewSSHServer(listenSpec, *usernameFlag, *passwordFlag, *authorizedKeysFlag, *hostkeyFlag)
 
 	if err != nil {
 		termproxy.ErrorOut(fmt.Sprintf("Network Error trying to listen on %s", listenSpec), err, termproxy.ErrNetwork)
