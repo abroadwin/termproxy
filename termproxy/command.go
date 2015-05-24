@@ -34,10 +34,6 @@ func (c *Command) Quit() error {
 	return c.command.Process.Signal(syscall.SIGTERM)
 }
 
-func (c *Command) Command() *exec.Cmd {
-	return c.command
-}
-
 func (c *Command) Run() error {
 	var err error
 
