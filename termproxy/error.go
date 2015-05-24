@@ -6,11 +6,11 @@ import (
 )
 
 const (
-	ErrUsage    uint8 = 1
-	ErrTerminal       = 1 << iota
-	ErrCommand        = 1 << iota
-	ErrTLS            = 1 << iota
-	ErrNetwork        = 1 << iota
+	ErrUsage    int = 1
+	ErrTerminal     = 1 << iota
+	ErrCommand      = 1 << iota
+	ErrTLS          = 1 << iota
+	ErrNetwork      = 1 << iota
 )
 
 var ErrorOut func(string, error, int) = errorout

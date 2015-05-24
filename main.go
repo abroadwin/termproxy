@@ -34,6 +34,9 @@ func main() {
 	command := tp.StringArg("COMMAND", "/bin/sh", "The program to run inside termproxy")
 
 	tp.Action = func() {
+		if *authorizedKeysFlag == "" && *passwordFlag == "" {
+			termproxy.ErrorOut("Invalid flag combination: authorized keys or password must be non-nil", nil, termproxy.ErrUsage)
+		}
 		serve(*listenSpec, *command)
 	}
 
