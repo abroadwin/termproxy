@@ -75,12 +75,6 @@ func (s *SSHServer) initSSH(username, password, authorizedKeys, privateKey strin
 	}
 
 	s.sshConfig = &ssh.ServerConfig{
-		PasswordCallback: func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
-			if c.User() == username && string(pass) == password {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("password rejected for %q", c.User())
-		},
 		PublicKeyCallback: func(c ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
 			for _, pubKey := range pubKeys {
 				if bytes.Equal(key.Marshal(), pubKey.Marshal()) {
@@ -89,6 +83,16 @@ func (s *SSHServer) initSSH(username, password, authorizedKeys, privateKey strin
 			}
 			return nil, fmt.Errorf("Public key authentication rejected")
 		},
+	}
+
+	if password != "" {
+		s.sshConfig.PasswordCallback = func(c ssh.ConnMetadata, pass []byte) (*ssh.Permissions, error) {
+			if c.User() == username && string(pass) == password {
+				return nil, nil
+			}
+
+			return nil, fmt.Errorf("password rejected for %q", c.User())
+		}
 	}
 
 	privateBytes, err := ioutil.ReadFile(privateKey)

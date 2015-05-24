@@ -24,9 +24,9 @@ func main() {
 	tp := cli.App("termproxy", "Proxy your terminal over SSH to others")
 
 	usernameFlag = tp.StringOpt("u username", "scott", "Username for SSH")
-	passwordFlag = tp.StringOpt("p password", "tiger", "Password for SSH")
+	passwordFlag = tp.StringOpt("p password", "tiger", "Password for SSH (set to '' to disable)")
 	hostkeyFlag = tp.StringOpt("k host-key", "host_key_rsa", "SSH private host key to present to clients")
-	authorizedKeysFlag = tp.StringOpt("a authorized-keys", "", "SSH private host key to present to clients")
+	authorizedKeysFlag = tp.StringOpt("a authorized-keys", "", "SSH authorized hosts for public key authentication")
 	readOnly = tp.BoolOpt("r read-only", false, "Disallow remote clients from entering input")
 	notifications = tp.BoolOpt("n notifications", true, "Print notifications on connection and disconnection")
 
