@@ -1,6 +1,8 @@
 package termproxy
 
 import (
+	"bytes"
+	"io"
 	"testing"
 	"time"
 )
@@ -56,5 +58,37 @@ func TestCommand(t *testing.T) {
 
 	if !closed {
 		t.Fatal("Command was not closed after run")
+	}
+}
+
+func TestCopier(t *testing.T) {
+	c := NewCopier()
+	buf1, buf2, buf3 := new(bytes.Buffer), new(bytes.Buffer), new(bytes.Buffer)
+	handled := false
+
+	c.Handler = func(buf []byte, w io.Writer, r io.Reader) ([]byte, error) {
+		handled = true
+		return buf, nil
+	}
+
+	if _, err := buf1.Write([]byte("fart")); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := buf2.Write([]byte("poop")); err != nil {
+		t.Fatal(err)
+	}
+
+	go c.Copy(buf3, buf2)
+	go c.Copy(buf3, buf1)
+
+	time.Sleep(10 * time.Millisecond)
+
+	if string(buf3.Bytes()) != "poopfart" {
+		t.Fatal("String was malformed after copy: %q", string(buf3.Bytes()))
+	}
+
+	if !handled {
+		t.Fatal("Handler was not triggered during copy")
 	}
 }
