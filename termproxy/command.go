@@ -30,6 +30,10 @@ func (c *Command) PTY() *os.File {
 	return c.pty
 }
 
+func (c *Command) Quit() error {
+	return c.command.Process.Signal(syscall.SIGTERM)
+}
+
 func (c *Command) Command() *exec.Cmd {
 	return c.command
 }
@@ -51,6 +55,7 @@ func (c *Command) Run() error {
 	if c.WinchHandler != nil {
 		sigchan := make(chan os.Signal)
 		signal.Notify(sigchan, syscall.SIGWINCH)
+		// FIXME leaky goroutine
 		go func() {
 			for {
 				<-sigchan
@@ -72,5 +77,5 @@ func (c *Command) waitForClose() {
 
 	c.pty.Close()
 
-	ErrorOut("Shell Exited!", nil, 0)
+	//ErrorOut("Shell Exited!", nil, 0)
 }
