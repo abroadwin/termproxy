@@ -3,7 +3,6 @@ package termproxy
 import (
 	"fmt"
 	"io"
-	"regexp"
 	"sync"
 	"time"
 
@@ -15,8 +14,6 @@ var (
 	windowState      *term.State
 	winsize          Winch
 )
-
-var posRegex = regexp.MustCompile("\027[(0-9]+;[0-9]+R")
 
 func setWindowState(state *term.State, size Winch) {
 	windowStateMutex.Lock()
