@@ -8,8 +8,8 @@ import (
 )
 
 func TestCommand(t *testing.T) {
-	cmd := NewCommand("echo hello; read")
-	if cmd.String() != "echo hello; read" {
+	cmd := NewCommand("echo hello; cat")
+	if cmd.String() != "echo hello; cat" {
 		t.Fatal("Command string did not equal what was passed")
 	}
 
@@ -29,7 +29,7 @@ func TestCommand(t *testing.T) {
 		}
 	}()
 
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	if cmd.PTY() == nil {
 		t.Fatal("PTY was nil after execution")
@@ -39,9 +39,11 @@ func TestCommand(t *testing.T) {
 		t.Fatal("PTY handler wasn't invoked")
 	}
 
+	myPty := cmd.PTY()
+
 	buf := make([]byte, 32)
 
-	n, err := cmd.PTY().Read(buf)
+	n, err := myPty.Read(buf)
 	if err != nil {
 		t.Fatal(err)
 	}
