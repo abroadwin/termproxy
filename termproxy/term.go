@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	term "github.com/erikh/termproxy/dockerterm"
 )
@@ -89,12 +88,6 @@ func writetop(w io.Writer, str string) error {
 	if err != nil {
 		return err
 	}
-
-	go func() {
-		time.Sleep(1 * time.Second)
-		w.Write([]byte{27, '[', '7', 'm', 27, '[', '1', ';', '1', 'H', 27, '[', '2', 'K'})
-		w.Write([]byte{27, '[', '0', 'm', 27, '8'})
-	}()
 
 	return nil
 }
