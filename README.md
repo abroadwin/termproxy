@@ -4,6 +4,8 @@ termproxy is a shared program tool. It allows you to start the program of your
 choice (a shell, vim/emacs, etc) and allows others to connect and interact with
 it via SSH. The intended use case is pairing.
 
+[See it in action](https://www.youtube.com/watch?v=ReTf-g7uKyo)
+
 ## Features
 
 * Share a terminal with your friends or collagues over SSH.
