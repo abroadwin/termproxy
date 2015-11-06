@@ -1,10 +1,10 @@
 test:
-	go test -v ./...
+	godep go test -v ./...
 
-dist:
+dist: distclean
 	sh dist.sh
 
 distclean:
-	rm termproxy-*.tar.gz
+	rm -f *.bz2
 
 all: test dist
