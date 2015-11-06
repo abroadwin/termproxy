@@ -1,7 +1,5 @@
 # termproxy: share a program with others (for pairing!)
 
-**termproxy is currently alpha quality**
-
 termproxy is a shared program tool. It allows you to start the program of your
 choice (a shell, vim/emacs, etc) and allows others to connect and interact with
 it via SSH. The intended use case is pairing.
@@ -33,26 +31,13 @@ shared program.
 
 ## Installation
 
-```bash
-$ go get github.com/erikh/termproxy
-```
-
-You will have to supply a host private key to the program so that SSH clients
-can connect to it. Do this by supplying the `-k` option. Generating this is
-just like generating any ssh key:
-
-```bash
-$ ssh-keygen -t rsa -b 4096 -f host_key_rsa -N ''
-```
-
-Will work for termproxy as long as it is in the directory termproxy is launched
-in.
+See our [releases](https://github.com/erikh/termproxy/releases).
 
 ## Usage
 
 Server (presumes default settings):
 ```
-termproxy <host:port> <program>
+termproxy <program>
 ```
 
 Client:
