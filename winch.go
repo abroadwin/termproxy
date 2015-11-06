@@ -47,7 +47,6 @@ func compareAndSetWinsize(host string, ws termproxy.Winch, command *termproxy.Co
 	}
 
 	termproxy.SetWinsize(command.PTY().Fd(), termproxy.Winch{Height: height, Width: width})
-	termproxy.SetWinsize(0, termproxy.Winch{Height: height, Width: width})
 
 	s.Iterate(func(s *server.SSHServer, c net.Conn, index int) error {
 		payload := []byte{

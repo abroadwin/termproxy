@@ -157,7 +157,6 @@ func (s *SSHServer) Listen() {
 
 						winch.Conn = conn
 						s.InWinch <- winch
-						req.Reply(true, nil)
 					case "pty-req":
 						split := bytes.SplitN(req.Payload[4:], []byte{0}, 2)
 						// the nul termination split up here chops a byte off the head of
