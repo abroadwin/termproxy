@@ -16,8 +16,8 @@ import (
 const TIME_WAIT = 10 * time.Millisecond
 
 var (
-	usernameFlag, passwordFlag, hostkeyFlag, authorizedKeysFlag *string
-	readOnly, notifications                                     *bool
+	listenSpec, usernameFlag, passwordFlag, hostkeyFlag, authorizedKeysFlag *string
+	readOnly, notifications                                                 *bool
 )
 
 func main() {
@@ -29,8 +29,8 @@ func main() {
 	authorizedKeysFlag = tp.StringOpt("a authorized-keys", "", "SSH authorized hosts for public key authentication")
 	readOnly = tp.BoolOpt("r read-only", false, "Disallow remote clients from entering input")
 	notifications = tp.BoolOpt("n notifications", true, "Print notifications on connection and disconnection")
+	listenSpec = tp.StringOpt("l listen", "0.0.0.0:1234", "The host:port to listen for SSH")
 
-	listenSpec := tp.StringArg("LISTEN", "0.0.0.0:1234", "The host:port to listen for SSH")
 	command := tp.StringArg("COMMAND", "/bin/sh", "The program to run inside termproxy")
 
 	tp.Action = func() {
