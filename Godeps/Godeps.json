@@ -1,0 +1,22 @@
+{
+	"ImportPath": "github.com/erikh/termproxy",
+	"GoVersion": "go1.5.1",
+	"Packages": [
+		"./..."
+	],
+	"Deps": [
+		{
+			"ImportPath": "github.com/jawher/mow.cli",
+			"Rev": "cea64dc3eb09a4a293ed0d9a14438e171e343c1a"
+		},
+		{
+			"ImportPath": "github.com/kr/pty",
+			"Comment": "release.r56-29-gf7ee69f",
+			"Rev": "f7ee69f31298ecbe5d2b349c711e2547a617d398"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/ssh",
+			"Rev": "83f1503f771a82af8a31f358eb825e9efb5dae6c"
+		}
+	]
+}
